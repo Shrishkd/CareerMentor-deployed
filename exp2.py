@@ -1,0 +1,1009 @@
+import os
+import sys
+import tempfile
+import wave
+import numpy as np
+import sounddevice as sd
+import threading
+import time
+
+# Import libraries
+import fitz
+import tkinter as tk
+from tkinter import filedialog
+import pyttsx3
+from datetime import datetime
+from dotenv import load_dotenv
+import re
+import matplotlib.pyplot as plt
+from fpdf import FPDF
+import json
+import speech_recognition as sr
+load_dotenv() 
+
+
+GENAI_AVAILABLE = False
+try:
+    import google.generativeai as genai
+    
+    api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if api_key:
+        genai.configure(api_key=api_key)
+        GENAI_AVAILABLE = True
+        print("✅ Gemini API configured")
+    else:
+        print("❌ No Gemini API key found in env. Set GOOGLE_API_KEY to enable Gemini.")
+except Exception:
+    GENAI_AVAILABLE = False
+    print("❌ google.generativeai library not available (pip install google-generativeai).")
+
+DEFAULT_MODEL_NAME = "gemini-1.5-flash"
+
+# Try importing whisper
+try:
+    import whisper
+    print("✅ Whisper imported successfully")
+    print("🔄 Loading Whisper model...")
+    whisper_model = whisper.load_model("small")
+    print("✅ Whisper model loaded successfully!")
+    WHISPER_AVAILABLE = True
+except Exception as e:
+    print(f"❌ Whisper setup failed: {e}")
+    whisper_model = None
+    WHISPER_AVAILABLE = False
+
+# ========== Enhanced Gemini Setup ==========
+load_dotenv()
+api_key = os.getenv("GEMINI_API_KEY")
+
+if not api_key:
+    print("❌ GEMINI_API_KEY not found in environment variables")
+    api_key = input("Please enter your Gemini API key: ").strip()
+
+
+# ========== Global variables for smart recording ==========
+is_recording = False
+silence_duration = 0
+max_silence_before_stop = 3.0
+min_answer_duration = 5.0
+audio_buffer = []
+
+# ========== PDF Handling ==========
+def select_pdf_file():
+    try:
+        root = tk.Tk()
+        root.withdraw()
+        print("📂 Please select your resume PDF...")
+        pdf_path = filedialog.askopenfilename(
+            title="Select Resume PDF",
+            filetypes=[("PDF files", "*.pdf")]
+        )
+        root.destroy()
+        if not pdf_path:
+            pdf_path = input("❌ No file selected. Enter PDF path manually: ").strip()
+        return pdf_path
+    except Exception as e:
+        print(f"⚠️ Error opening file dialog: {e}")
+        return input("Enter resume PDF path manually: ").strip()
+
+def extract_text_from_pdf(pdf_path):
+    try:
+        with fitz.open(pdf_path) as doc:
+            text = "\n".join([page.get_text("text") for page in doc])
+        return text.strip()
+    except Exception as e:
+        print(f"❌ Error extracting text from PDF: {e}")
+        return ""
+
+# ========== Enhanced Gemini LLM Calls ==========
+def call_llm(prompt, temperature=0.7, max_tokens=2048, model_name=DEFAULT_MODEL_NAME):
+    """Call Gemini LLM safely with modern API"""
+    if not GENAI_AVAILABLE:
+        return "⚠️ Gemini not available — running fallback mode."
+
+    try:
+        print("🔄 Calling Gemini API...")
+        model = genai.GenerativeModel(
+            model_name=model_name,
+            generation_config={
+                "temperature": temperature,
+                "max_output_tokens": max_tokens,
+            }
+        )
+        response = model.generate_content(prompt)
+        result = response.text.strip() if response and response.text else "No response."
+        print("✅ Gemini API call successful")
+        return result
+    except Exception as e:
+        print(f"❌ Error calling Gemini API: {e}")
+        return f"Error calling Gemini: {e}"
+
+
+def generate_questions_from_resume(resume_text):
+    prompt = f"""
+As an expert technical interviewer, analyze the following resume and generate exactly 5 highly relevant, industry-standard interview questions. Make them specific to the candidate's background:
+
+RESUME:
+{resume_text}
+
+REQUIREMENTS:
+- Generate exactly 5 questions
+- 3 theoretical/conceptual questions related to their field
+- 2 coding/problem-solving questions in Python or C/C++ in DSA
+- Questions should be easy but fair
+- Focus on their mentioned skills and experience level
+- Do not include any introduction text or explanatory headers
+- Start directly with Question 1
+
+FORMAT:
+1. [First theoretical question]
+2. [Second theoretical question]  
+3. [Third theoretical question]
+4. [First coding question]
+5. [Second coding question]
+
+Return ONLY the numbered questions, nothing else:
+"""
+    
+    print("🔄 Generating questions from resume...")
+    response = call_llm(prompt, temperature=0.8)
+    print(f"✅ Questions generated successfully")
+    return response
+
+def parse_questions_properly(questions_text):
+    """Parse questions and remove any introductory text"""
+    lines = questions_text.split('\n')
+    questions = []
+    
+    for line in lines:
+        line = line.strip()
+        # Look for lines that start with numbers (1., 2., etc.) or **
+        if re.match(r'^\d+\.', line) or line.startswith('**'):
+            # Clean up the question
+            question = re.sub(r'^\d+\.\s*', '', line)  # Remove number prefix
+            question = re.sub(r'^\*\*[^*]*\*\*:?\s*', '', question)  # Remove **Theoretical:** etc.
+            question = question.strip()
+            
+            # Only add substantial questions (not headers or intro text)
+            if len(question) > 20 and not any(skip_word in question.lower() for skip_word in 
+                                            ['here are', 'questions for', 'tailored to', 'interview questions']):
+                questions.append(question)
+    
+    return questions[:5]  # Return only first 5 questions
+
+def enhanced_evaluate_answer(question, answer, resume_context=""):
+    """Enhanced evaluation using Gemini with detailed analysis and explanations"""
+    
+    prompt = f"""
+As an expert technical interviewer, evaluate this candidate's answer comprehensively and provide detailed explanations.
+
+QUESTION: {question}
+
+CANDIDATE'S ANSWER: {answer}
+
+CANDIDATE BACKGROUND: {resume_context[:500]}...
+
+EVALUATION CRITERIA:
+1. Technical Accuracy (0-25 points)
+2. Completeness & Depth (0-25 points) 
+3. Communication Clarity (0-20 points)
+4. Problem-Solving Approach (0-20 points)
+5. Relevance to Role (0-10 points)
+
+ANALYSIS REQUIREMENTS:
+- Provide specific technical feedback with detailed explanations
+- Explain WHY the answer is good or bad with concrete examples
+- Identify specific strengths and weaknesses with reasoning
+- Give actionable improvement suggestions
+- Consider the candidate's experience level
+- Provide detailed explanation of the scoring rationale
+
+RESPONSE FORMAT (STRICT JSON):
+{{
+    "overall_score": 75,
+    "category_scores": {{
+        "technical_accuracy": 18,
+        "completeness": 20, 
+        "communication": 15,
+        "problem_solving": 16,
+        "relevance": 6
+    }},
+    "strengths": ["Shows good understanding of core concepts", "Provided specific examples"],
+    "weaknesses": ["Could explain more details", "Missing some advanced concepts"],
+    "detailed_feedback": "The candidate demonstrates solid foundational knowledge but could benefit from deeper technical explanations.",
+    "detailed_explanation": "This answer is scored 75/100 because: Technical accuracy is strong (18/25) as the candidate correctly identified key concepts and provided accurate information about the topic. However, completeness could be improved (20/25) as some important aspects were not fully addressed. Communication was clear (15/20) with good structure, though some technical terms could be better explained. The problem-solving approach (16/20) showed logical thinking but lacked some depth in analysis. Overall, this demonstrates good competency with room for improvement in technical depth and comprehensive coverage of the topic.",
+    "improvement_suggestions": ["Practice explaining complex concepts simply", "Include more real-world examples", "Expand on technical details"],
+    "interviewer_notes": "Good potential, needs some development in communication",
+    "follow_up_questions": ["Can you explain the implementation details?", "How would you optimize this solution?"]
+}}
+"""
+    
+    print(f"🔄 Evaluating answer using Gemini...")
+    response = call_llm(prompt, temperature=0.3, max_tokens=3000)
+    
+    try:
+        # Clean the response to ensure valid JSON
+        response_clean = response.strip()
+        if response_clean.startswith("```"):
+            response_clean = response_clean[7:]
+        if response_clean.endswith("```"):
+            response_clean = response_clean[:-3]
+        response_clean = response_clean.strip()
+        
+        print(f"🔍 Attempting to parse JSON response...")
+        evaluation = json.loads(response_clean)
+        print(f"✅ Successfully parsed evaluation")
+        print(f"📊 Score: {evaluation.get('overall_score', 'N/A')}/100")
+        
+        # Validate and ensure all required fields exist
+        required_keys = ["overall_score", "category_scores", "strengths", "weaknesses", "detailed_feedback", "detailed_explanation"]
+        for key in required_keys:
+            if key not in evaluation:
+                if key == "detailed_explanation":
+                    evaluation[key] = f"This answer received a score of {evaluation.get('overall_score', 50)}/100. The evaluation is based on technical accuracy, completeness, communication clarity, problem-solving approach, and relevance to the role."
+                elif key == "overall_score":
+                    evaluation[key] = 60
+                elif key == "category_scores":
+                    evaluation[key] = {"technical_accuracy": 12, "completeness": 12, "communication": 12, "problem_solving": 12, "relevance": 6}
+        
+        return evaluation
+        
+    except json.JSONDecodeError as e:
+        print(f"❌ JSON parsing failed: {e}")
+        print(f"🔍 Raw response: {response[:300]}...")
+        
+        # Extract score using regex as fallback
+        score_match = re.search(r'"overall_score":\s*(\d+)', response)
+        score = int(score_match.group(1)) if score_match else 60
+        
+        print(f"📊 Extracted score using regex: {score}")
+        
+        # Return fallback evaluation structure with explanation
+        return {
+            "overall_score": score,
+            "category_scores": {
+                "technical_accuracy": int(score * 0.25),
+                "completeness": int(score * 0.25),
+                "communication": int(score * 0.20),
+                "problem_solving": int(score * 0.20),
+                "relevance": int(score * 0.10)
+            },
+            "strengths": ["Provided a response to the question"],
+            "weaknesses": ["Could provide more comprehensive answers"],
+            "detailed_feedback": f"The candidate provided an answer with an estimated quality score of {score}/100. The response shows effort but could be improved with more detail and technical depth.",
+            "detailed_explanation": f"This answer received {score}/100 points. The evaluation is based on several factors: technical accuracy, completeness of the response, clarity of communication, problem-solving approach, and relevance to the role. While the candidate attempted to answer the question, there are opportunities for improvement in providing more comprehensive and detailed responses with better technical depth and clearer explanations.",
+            "improvement_suggestions": [
+                "Provide more detailed explanations",
+                "Include specific examples",
+                "Structure answers more clearly"
+            ],
+            "interviewer_notes": "Evaluation generated using fallback method due to response parsing issues",
+            "follow_up_questions": ["Can you elaborate on that?", "What specific experience do you have with this?"]
+        }
+
+# ========== Keep all your existing audio functions (smart_audio_recording, etc.) ==========
+def detect_speech_activity(audio_chunk, threshold=0.01):
+    if len(audio_chunk) == 0:
+        return False
+    rms = np.sqrt(np.mean(audio_chunk ** 2))
+    return rms > threshold
+
+def smart_audio_recording(max_duration=120, silence_threshold=3.0, min_duration=5.0):
+    global is_recording, audio_buffer
+    
+    samplerate = 16000
+    chunk_duration = 0.1
+    chunk_size = int(samplerate * chunk_duration)
+    
+    audio_buffer = []
+    silence_counter = 0.0
+    total_duration = 0.0
+    
+    is_recording = True
+    print("🎙️ Recording started... Speak your answer!")
+    print(f"📍 Will auto-stop after {silence_threshold}s of silence (minimum {min_duration}s)")
+    
+    try:
+        def audio_callback(indata, frames, time, status):
+            if status:
+                print(f"Audio status: {status}")
+            audio_buffer.append(indata.copy())
+        
+        with sd.InputStream(samplerate=samplerate, channels=1, 
+                           callback=audio_callback, blocksize=chunk_size):
+            
+            while is_recording and total_duration < max_duration:
+                time.sleep(chunk_duration)
+                total_duration += chunk_duration
+                
+                if len(audio_buffer) > 0:
+                    latest_chunk = audio_buffer[-1].flatten()
+                    has_speech = detect_speech_activity(latest_chunk, threshold=0.015)
+                    
+                    if has_speech:
+                        silence_counter = 0.0
+                        print("🗣️", end="", flush=True)
+                    else:
+                        silence_counter += chunk_duration
+                        if silence_counter > 0.5:
+                            print(".", end="", flush=True)
+                    
+                    if (total_duration >= min_duration and 
+                        silence_counter >= silence_threshold):
+                        print(f"\n⏹️ Auto-stopped after {silence_threshold}s of silence")
+                        break
+                
+                if int(total_duration) % 5 == 0 and total_duration > 0:
+                    remaining = max_duration - total_duration
+                    print(f"\n⏱️ {int(total_duration)}s recorded, {int(remaining)}s remaining")
+    
+    except Exception as e:
+        print(f"\n❌ Recording error: {e}")
+        return None
+    
+    finally:
+        is_recording = False
+    
+    print(f"\n✅ Recording completed ({total_duration:.1f}s total)")
+    
+    if audio_buffer:
+        combined_audio = np.concatenate(audio_buffer, axis=0).flatten()
+        return combined_audio
+    
+    return None
+
+def create_temp_wav_file(audio_data, samplerate=16000):
+    try:
+        temp_fd, temp_path = tempfile.mkstemp(suffix='.wav', prefix='interview_audio_')
+        os.close(temp_fd)
+        
+        if audio_data.dtype != np.int16:
+            if audio_data.dtype == np.float32:
+                audio_data = np.clip(audio_data, -1.0, 1.0)
+                audio_data = (audio_data * 32767).astype(np.int16)
+            else:
+                audio_data = audio_data.astype(np.int16)
+        
+        with wave.open(temp_path, 'wb') as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(samplerate)
+            wav_file.writeframes(audio_data.tobytes())
+        
+        if os.path.exists(temp_path) and os.path.getsize(temp_path) > 0:
+            print(f"✅ Created temp audio file: {temp_path} ({os.path.getsize(temp_path)} bytes)")
+            return temp_path
+        else:
+            print(f"❌ Failed to create valid temp file: {temp_path}")
+            return None
+            
+    except Exception as e:
+        print(f"❌ Error creating temp WAV file: {e}")
+        return None
+
+def transcribe_with_whisper(audio_file_path):
+    if not WHISPER_AVAILABLE or not whisper_model:
+        print("⚠️ Whisper not available, using Google Speech Recognition")
+        return transcribe_with_google_fallback(audio_file_path)
+    
+    try:
+        if not os.path.exists(audio_file_path):
+            raise FileNotFoundError(f"Audio file not found: {audio_file_path}")
+        
+        file_size = os.path.getsize(audio_file_path)
+        if file_size == 0:
+            raise ValueError(f"Audio file is empty: {audio_file_path}")
+        
+        print(f"🔄 Transcribing with Whisper... (File: {file_size} bytes)")
+        
+        result = whisper_model.transcribe(
+            audio_file_path,
+            language="en",
+            task="transcribe"
+        )
+        
+        transcription = result["text"].strip()
+        print(f"📝 Whisper Transcription: '{transcription}'")
+        return transcription
+        
+    except Exception as e:
+        print(f"❌ Whisper transcription error: {e}")
+        return transcribe_with_google_fallback(audio_file_path)
+    
+    finally:
+        try:
+            if os.path.exists(audio_file_path):
+                os.remove(audio_file_path)
+        except:
+            pass
+
+def transcribe_with_google_fallback(audio_file_path):
+    recognizer = sr.Recognizer()
+    try:
+        print("🔄 Using Google Speech Recognition...")
+        with sr.AudioFile(audio_file_path) as source:
+            recognizer.adjust_for_ambient_noise(source, duration=0.5)
+            audio_data = recognizer.record(source)
+        
+        text = recognizer.recognize_google(audio_data)
+        print(f"📝 Google Transcription: '{text}'")
+        return text
+        
+    except Exception as e:
+        print(f"❌ Fallback transcription error: {e}")
+        return ""
+    finally:
+        try:
+            if os.path.exists(audio_file_path):
+                os.remove(audio_file_path)
+        except:
+            pass
+
+def listen_to_answer():
+    print("\n" + "="*50)
+    print("🎙️ READY TO RECORD YOUR ANSWER")
+    print("="*50)
+    
+    try:
+        audio_data = smart_audio_recording(
+            max_duration=120,
+            silence_threshold=3.0,
+            min_duration=5.0
+        )
+        
+        if audio_data is None or len(audio_data) == 0:
+            print("❌ No audio data recorded")
+            return ""
+        
+        max_amplitude = np.max(np.abs(audio_data))
+        if max_amplitude < 0.005:
+            print("⚠️ Audio seems very quiet - please speak louder next time")
+        
+        temp_audio_path = create_temp_wav_file(audio_data, samplerate=16000)
+        if not temp_audio_path:
+            print("❌ Failed to create temporary audio file")
+            return ""
+        
+        return transcribe_with_whisper(temp_audio_path)
+        
+    except Exception as e:
+        print(f"❌ Error in listen_to_answer: {e}")
+        return ""
+
+def speak_text(text, voice_id=None):
+    engine = pyttsx3.init()
+    if voice_id:
+        engine.setProperty('voice', voice_id)
+    engine.setProperty('rate', 150)
+    engine.say(text)
+    engine.runAndWait()
+
+# ========== Enhanced Report Generation with Detailed Explanations ==========
+def create_comprehensive_report(questions, answers, evaluations, final_assessment, resume_text):
+    print("🔄 Creating comprehensive report with detailed explanations...")
+    
+    def clean_text_for_pdf(text):
+        """Clean text to remove problematic Unicode characters for PDF generation"""
+        # Replace problematic Unicode characters
+        replacements = {
+            '•': '- ',
+            '✓': '+ ',
+            '✗': '- ',
+            '→': '-> ',
+            '←': '<- ',
+            '↑': '^ ',
+            '↓': 'v ',
+            '★': '* ',
+            '☆': '* ',
+            '♦': '* ',
+            '▪': '* ',
+            '▫': '* ',
+            '◦': '* ',
+            '◘': '* ',
+            '○': '* ',
+            '●': '* ',
+            '■': '* ',
+            '□': '* ',
+            '▲': '* ',
+            '▼': '* ',
+            '►': '> ',
+            '◄': '< ',
+            ''': "'",
+            ''': "'",
+            '"': '"',
+            '"': '"',
+            '…': '...',
+            '–': '-',
+            '—': '-',
+            '\u2013': '-',
+            '\u2014': '-',
+            '\u2018': "'",
+            '\u2019': "'",
+            '\u201c': '"',
+            '\u201d': '"',
+            '\u2026': '...',
+            '\u2022': '- '
+        }
+        
+        if not isinstance(text, str):
+            text = str(text)
+        
+        for old, new in replacements.items():
+            text = text.replace(old, new)
+        
+        # Remove any remaining problematic characters
+        text = text.encode('ascii', 'ignore').decode('ascii')
+        return text
+    
+    scores = [eval_data["overall_score"] for eval_data in evaluations]
+    questions_short = [f"Q{i+1}" for i in range(len(questions))]
+    
+    # Create performance visualization
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+    
+    # Overall scores plot
+    ax1.plot(questions_short, scores, marker='o', linestyle='-', linewidth=3, markersize=10, color='#2E86AB')
+    ax1.set_title('Interview Performance Analysis', fontsize=16, fontweight='bold')
+    ax1.set_xlabel('Questions', fontsize=12)
+    ax1.set_ylabel('Score (%)', fontsize=12)
+    ax1.set_ylim(0, 100)
+    ax1.grid(True, alpha=0.3)
+    ax1.axhline(y=70, color='green', linestyle='--', alpha=0.5, label='Good Performance')
+    ax1.axhline(y=50, color='orange', linestyle='--', alpha=0.5, label='Average Performance') 
+    ax1.legend()
+    
+    for i, score in enumerate(scores):
+        ax1.annotate(f'{score}%', (questions_short[i], score), 
+                    textcoords="offset points", xytext=(0,15), ha='center', fontweight='bold')
+    
+    # Category breakdown for first question
+    if evaluations and "category_scores" in evaluations[0]:
+        categories = list(evaluations[0]["category_scores"].keys())
+        category_scores = [evaluations[0]["category_scores"][cat] for cat in categories]
+        
+        ax2.bar(categories, category_scores, color=['#A23B72', '#F18F01', '#C73E1D', '#593E2A', '#2E86AB'])
+        ax2.set_title('Performance Breakdown (Sample Question)', fontsize=14, fontweight='bold')
+        ax2.set_ylabel('Score', fontsize=12)
+        ax2.tick_params(axis='x', rotation=45)
+    
+    plt.tight_layout()
+    graph_path = "comprehensive_interview_analysis.png"
+    plt.savefig(graph_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    # Create PDF report
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    
+    # Cover Page
+    pdf.add_page()
+    pdf.set_font("Arial", style='B', size=20)
+    pdf.cell(0, 20, "COMPREHENSIVE INTERVIEW ASSESSMENT", ln=True, align='C')
+    
+    pdf.set_font("Arial", size=14)
+    pdf.ln(10)
+    pdf.cell(0, 10, f"Date: {datetime.now().strftime('%A, %B %d, %Y at %I:%M %p')}", ln=True)
+    pdf.cell(0, 10, "Assessment System: AI-Powered Interview Analysis", ln=True)
+    pdf.cell(0, 10, f"Speech Recognition: {'Whisper AI (Offline)' if WHISPER_AVAILABLE else 'Google STT (Online)'}", ln=True)
+    
+    # Executive Summary
+    pdf.ln(15)
+    pdf.set_font("Arial", style='B', size=16)
+    pdf.cell(0, 10, "EXECUTIVE SUMMARY", ln=True)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(5)
+    
+    pdf.set_font("Arial", style='B', size=14)
+    pdf.cell(0, 10, f"Overall Recommendation: {clean_text_for_pdf(final_assessment['final_recommendation'])}", ln=True)
+    pdf.cell(0, 10, f"Confidence Level: {final_assessment['confidence_level']}/10", ln=True)
+    pdf.cell(0, 10, f"Average Score: {sum(scores)/len(scores):.1f}%", ln=True)
+    
+    pdf.set_font("Arial", size=11)
+    pdf.ln(5)
+    pdf.multi_cell(0, 6, clean_text_for_pdf(final_assessment['overall_assessment']))
+    
+    # Performance Overview
+    pdf.add_page()
+    pdf.set_font("Arial", style='B', size=16)
+    pdf.cell(0, 10, "PERFORMANCE OVERVIEW", ln=True)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(5)
+    
+    pdf.image(graph_path, x=10, y=40, w=190)
+    pdf.ln(140)
+    
+    # Key Findings
+    pdf.add_page()
+    pdf.set_font("Arial", style='B', size=14)
+    pdf.cell(0, 10, "KEY STRENGTHS:", ln=True)
+    pdf.set_font("Arial", size=11)
+    for strength in final_assessment['key_strengths']:
+        pdf.cell(0, 6, f"- {clean_text_for_pdf(strength)}", ln=True)
+    
+    pdf.ln(5)
+    pdf.set_font("Arial", style='B', size=14)
+    pdf.cell(0, 10, "DEVELOPMENT AREAS:", ln=True)
+    pdf.set_font("Arial", size=11)
+    for area in final_assessment['development_areas']:
+        pdf.cell(0, 6, f"- {clean_text_for_pdf(area)}", ln=True)
+    
+    # Detailed Question Analysis with Explanations
+    pdf.add_page()
+    pdf.set_font("Arial", style='B', size=16)
+    pdf.cell(0, 10, "DETAILED QUESTION ANALYSIS WITH EXPLANATIONS", ln=True)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(10)
+    
+    for i, (question, answer, evaluation) in enumerate(zip(questions, answers, evaluations)):
+        if pdf.get_y() > 230:  # Start new page if needed
+            pdf.add_page()
+        
+        pdf.set_font("Arial", style='B', size=12)
+        pdf.cell(0, 8, f"Question {i+1}:", ln=True)
+        pdf.set_font("Arial", size=10)
+        pdf.multi_cell(0, 6, clean_text_for_pdf(question))
+        pdf.ln(2)
+        
+        pdf.set_font("Arial", style='B', size=11)
+        pdf.cell(0, 6, f"Overall Score: {evaluation['overall_score']}/100", ln=True)
+        
+        # Category scores if available
+        if "category_scores" in evaluation:
+            pdf.set_font("Arial", size=10)
+            for category, score in evaluation["category_scores"].items():
+                category_clean = clean_text_for_pdf(category.replace('_', ' ').title())
+                pdf.cell(0, 5, f"  - {category_clean}: {score}", ln=True)
+        
+        # Candidate's Answer (truncated)
+        pdf.ln(2)
+        pdf.set_font("Arial", style='B', size=10)
+        pdf.cell(0, 5, "Candidate's Answer:", ln=True)
+        pdf.set_font("Arial", style='I', size=9)
+        answer_text = clean_text_for_pdf(answer[:300] + "..." if len(answer) > 300 else answer)
+        pdf.multi_cell(0, 4, f'"{answer_text}"')
+        
+        # Detailed Explanation Section
+        pdf.ln(3)
+        pdf.set_font("Arial", style='B', size=10)
+        pdf.cell(0, 5, "Why This Answer Received This Score:", ln=True)
+        pdf.set_font("Arial", size=9)
+        explanation = evaluation.get('detailed_explanation', evaluation.get('detailed_feedback', 'No detailed explanation available.'))
+        pdf.multi_cell(0, 4, clean_text_for_pdf(explanation))
+        
+        # Brief Feedback
+        pdf.ln(2)
+        pdf.set_font("Arial", style='B', size=10)
+        pdf.cell(0, 5, "Brief Feedback:", ln=True)
+        pdf.set_font("Arial", size=9)
+        pdf.multi_cell(0, 4, clean_text_for_pdf(evaluation['detailed_feedback']))
+        
+        # Strengths and Weaknesses
+        pdf.ln(2)
+        pdf.set_font("Arial", style='B', size=9)
+        pdf.cell(0, 4, "Strengths:", ln=True)
+        pdf.set_font("Arial", size=8)
+        for strength in evaluation['strengths'][:2]:
+            pdf.multi_cell(0, 3, f"  + {clean_text_for_pdf(strength)}")
+        
+        pdf.set_font("Arial", style='B', size=9)
+        pdf.cell(0, 4, "Areas for Improvement:", ln=True)
+        pdf.set_font("Arial", size=8)
+        for weakness in evaluation['weaknesses'][:2]:
+            pdf.multi_cell(0, 3, f"  - {clean_text_for_pdf(weakness)}")
+        
+        # Improvement Suggestions
+        pdf.ln(1)
+        pdf.set_font("Arial", style='B', size=9)
+        pdf.cell(0, 4, "Improvement Suggestions:", ln=True)
+        pdf.set_font("Arial", size=8)
+        for suggestion in evaluation['improvement_suggestions'][:3]:
+            pdf.multi_cell(0, 3, f"  - {clean_text_for_pdf(suggestion)}")
+        
+        pdf.ln(5)
+    
+    # Final Recommendations
+    pdf.add_page()
+    pdf.set_font("Arial", style='B', size=16)
+    pdf.cell(0, 10, "FINAL RECOMMENDATIONS", ln=True)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(10)
+    
+    pdf.set_font("Arial", style='B', size=12)
+    pdf.cell(0, 8, f"Technical Level Assessment: {clean_text_for_pdf(final_assessment['technical_level'])}", ln=True)
+    pdf.cell(0, 8, f"Communication Rating: {final_assessment['communication_rating']}/10", ln=True)
+    pdf.cell(0, 8, f"Problem-Solving Rating: {final_assessment['problem_solving_rating']}/10", ln=True)
+    
+    pdf.ln(5)
+    pdf.set_font("Arial", style='B', size=11)
+    pdf.cell(0, 8, "Role Fit Analysis:", ln=True)
+    pdf.set_font("Arial", size=10)
+    pdf.multi_cell(0, 5, clean_text_for_pdf(final_assessment['role_fit']))
+    
+    pdf.ln(3)
+    pdf.set_font("Arial", style='B', size=11)
+    pdf.cell(0, 8, "Recommended Next Steps:", ln=True)
+    pdf.set_font("Arial", size=10)
+    pdf.multi_cell(0, 5, clean_text_for_pdf(final_assessment['next_steps']))
+    
+    # Save report
+    report_path = f"comprehensive_interview_report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    
+    try:
+        pdf.output(report_path)
+        print(f"✅ Report with detailed explanations generated successfully: {report_path}")
+    except UnicodeEncodeError as e:
+        print(f"❌ Unicode error in PDF generation: {e}")
+        # Try alternative approach
+        try:
+            # Force ASCII encoding
+            pdf.output(report_path, 'F')
+            print(f"✅ Report generated with ASCII encoding: {report_path}")
+        except Exception as e2:
+            print(f"❌ Failed to generate report: {e2}")
+            return None
+    
+    # Cleanup
+    if os.path.exists(graph_path):
+        os.remove(graph_path)
+    
+    return report_path
+
+def generate_final_interview_assessment(all_evaluations, resume_text):
+    """Keep your existing final assessment function"""
+    scores = [eval_data["overall_score"] for eval_data in all_evaluations]
+    avg_score = sum(scores) / len(scores) if scores else 0
+    
+    # Prepare evaluation summary
+    eval_summary = ""
+    for i, evaluation in enumerate(all_evaluations, 1):
+        eval_summary += f"Q{i} Score: {evaluation['overall_score']}/100\n"
+        eval_summary += f"Strengths: {', '.join(evaluation['strengths'][:2])}\n"
+        eval_summary += f"Weaknesses: {', '.join(evaluation['weaknesses'][:2])}\n\n"
+    
+    prompt = f"""
+As a senior technical interviewer, provide a comprehensive final assessment for this candidate.
+
+CANDIDATE BACKGROUND:
+{resume_text[:800]}...
+
+INTERVIEW PERFORMANCE SUMMARY:
+Average Score: {avg_score:.1f}/100
+{eval_summary}
+
+INDIVIDUAL QUESTION SCORES:
+{', '.join([str(score) for score in scores])}
+
+ASSESSMENT REQUIREMENTS:
+1. Overall hiring recommendation (Strong Hire/Hire/Maybe/No Hire)
+2. Key strengths demonstrated
+3. Major areas for improvement  
+4. Technical competency level
+5. Communication effectiveness
+6. Cultural fit indicators
+7. Specific role recommendations
+8. Salary band suggestion
+9. Onboarding focus areas
+
+RESPONSE FORMAT (STRICT JSON):
+{{
+    "final_recommendation": "Hire",
+    "confidence_level": 7,
+    "overall_assessment": "The candidate demonstrates solid technical fundamentals with good problem-solving abilities.",
+    "key_strengths": ["Technical knowledge", "Communication skills"],
+    "development_areas": ["Advanced concepts", "System design"],
+    "technical_level": "Mid",
+    "communication_rating": 7,
+    "problem_solving_rating": 7,
+    "role_fit": "Good fit for mid-level developer position with mentoring support",
+    "salary_recommendation": "Market rate for mid-level position",
+    "onboarding_focus": ["Advanced technical training", "Mentorship program"],
+    "next_steps": "Proceed to technical deep-dive interview"
+}}
+"""
+    
+    print("🔄 Generating final assessment...")
+    response = call_llm(prompt, temperature=0.2)
+    
+    try:
+        response_clean = response.strip()
+        if response_clean.startswith("```"):
+            response_clean = response_clean[7:]
+        if response_clean.endswith("```"):
+            response_clean = response_clean[:-3]
+        response_clean = response_clean.strip()
+        
+        final_assessment = json.loads(response_clean)
+        print("✅ Final assessment generated successfully")
+        return final_assessment
+        
+    except json.JSONDecodeError as e:
+        print(f"❌ Final assessment JSON parsing failed: {e}")
+        
+        return {
+            "final_recommendation": "Maybe" if avg_score >= 50 else "No Hire",
+            "confidence_level": 6,
+            "overall_assessment": f"Candidate scored an average of {avg_score:.1f}/100 across all questions.",
+            "key_strengths": ["Participated in all questions", "Showed engagement"],
+            "development_areas": ["Technical depth", "Communication clarity"],
+            "technical_level": "Junior" if avg_score < 60 else "Mid",
+            "communication_rating": min(10, max(1, int(avg_score / 10))),
+            "problem_solving_rating": min(10, max(1, int(avg_score / 10))),
+            "role_fit": "Requires additional assessment and potential training",
+            "salary_recommendation": "Entry-level to mid-level range",
+            "onboarding_focus": ["Technical skill development", "Communication training"],
+            "next_steps": "Additional technical assessment recommended"
+        }
+
+def get_time_greeting():
+    hour = datetime.now().hour
+    if hour < 12:
+        return "Good morning"
+    elif hour < 17:
+        return "Good afternoon"
+    else:
+        return "Good evening"
+
+# ========== Main Flow with Fixed Question Parsing ==========
+if __name__ == "__main__":
+    print("🚀 AI INTERVIEW SYSTEM - ENHANCED WITH DETAILED EXPLANATIONS")
+    print("=" * 70)
+    
+    if WHISPER_AVAILABLE and whisper_model:
+        print("📌 Speech Recognition: Whisper AI (Offline, High Accuracy)")
+    else:
+        print("📌 Speech Recognition: Google STT (Online Fallback)")
+    
+    print(f"🤖 AI Evaluation: Gemini {'New API' if GENAI_AVAILABLE else 'Legacy API'}")
+    print("✨ Features: Smart auto-stop, Real Gemini evaluation, Detailed explanations")
+    
+    # Test Gemini API first
+    print("\n🔧 Testing Gemini API...")
+    test_response = call_llm("Say 'Hello, Gemini API is working!' in exactly those words.")
+    if "Hello, Gemini API is working!" in test_response:
+        print("✅ Gemini API test successful!")
+    else:
+        print(f"⚠️ Gemini API test response: {test_response}")
+        response = input("Gemini API may not be working properly. Continue anyway? (y/n): ")
+        if response.lower() != 'y':
+            exit()
+    
+    # PDF processing
+    pdf_path = select_pdf_file()
+    if not pdf_path:
+        print("❌ No PDF selected. Exiting.")
+        exit()
+
+    resume_text = extract_text_from_pdf(pdf_path)
+    if not resume_text:
+        print("❌ Could not extract resume text. Exiting.")
+        exit()
+
+    print("🔄 Generating personalized interview questions using Gemini...")
+    questions_text = generate_questions_from_resume(resume_text)
+    
+    # ✅ FIXED: Properly parse questions and remove intro text
+    main_questions = parse_questions_properly(questions_text)
+
+    print(f"\n📝 Generated {len(main_questions)} questions:")
+    for i, q in enumerate(main_questions, 1):
+        print(f"{i}. {q[:100]}{'...' if len(q) > 100 else ''}")
+
+    if len(main_questions) < 5:
+        print("⚠️ Less than 5 questions generated. Consider checking your resume content.")
+
+    # Start interview
+    greeting = get_time_greeting()
+    
+    print("\n🎤 STARTING INTERVIEW SESSION")
+    print("=" * 40)
+    
+    speak_text(f"{greeting}. Welcome to your comprehensive AI interview assessment powered by Gemini. "
+               f"I'll ask you {len(main_questions)} questions. Answer naturally - "
+               f"the system will automatically detect when you're finished speaking.")
+
+    # Introduction
+    speak_text("Let's begin with your introduction. Please tell me about yourself, your background, and your experience.")
+    intro_answer = listen_to_answer()
+
+    # Collect all responses
+    all_questions = ["Please introduce yourself and tell me about your background"] + main_questions
+    all_answers = [intro_answer]
+    all_evaluations = []
+
+    # Evaluate introduction
+    print("\n🔄 Evaluating your introduction...")
+    if len(intro_answer.split()) > 5:
+        intro_eval = enhanced_evaluate_answer(
+            "Please introduce yourself and tell me about your background", 
+            intro_answer, 
+            resume_text
+        )
+        all_evaluations.append(intro_eval)
+        speak_text(f"Thank you for your introduction. You scored {intro_eval['overall_score']} out of 100.")
+        print(f"📊 Introduction score: {intro_eval['overall_score']}/100")
+    else:
+        speak_text("Thank you. Your introduction was brief - consider providing more detail in future interviews.")
+        all_evaluations.append({
+            "overall_score": 25,
+            "category_scores": {"technical_accuracy": 5, "completeness": 5, "communication": 5, "problem_solving": 5, "relevance": 5},
+            "strengths": ["Provided basic response"],
+            "weaknesses": ["Very brief introduction", "Lacks detail about experience"],
+            "detailed_feedback": "Introduction was too brief to properly assess candidate background and experience.",
+            "detailed_explanation": "This introduction received 25/100 points because it was too brief to evaluate technical competency, communication skills, or relevant experience. A good introduction should include background information, key skills, relevant experience, and career objectives. The brevity suggests the candidate may be nervous or unprepared for the interview process.",
+            "improvement_suggestions": ["Provide more detail about background", "Highlight key experiences", "Be more specific about skills"],
+            "interviewer_notes": "Candidate may be nervous or unprepared",
+            "follow_up_questions": ["Can you tell me more about your experience?", "What are your key skills?"]
+        })
+
+    # Main interview questions
+    for idx, question in enumerate(main_questions, start=1):
+        print(f"\n{'='*60}")
+        print(f"QUESTION {idx} OF {len(main_questions)}")
+        print('='*60)
+        
+        speak_text(f"Question {idx}: {question}")
+        
+        print(f"\n🔥 Question: {question}")
+        print("\nYour answer will be automatically recorded. Speak naturally and the system will detect when you're finished.")
+        
+        answer = listen_to_answer()
+        all_answers.append(answer)
+
+        if len(answer.split()) > 5:
+            print(f"\n🔄 Evaluating your answer using Gemini AI...")
+            evaluation = enhanced_evaluate_answer(question, answer, resume_text)
+            all_evaluations.append(evaluation)
+            
+            score = evaluation['overall_score']
+            speak_text(f"Thank you for your detailed answer. You scored {score} out of 100 for this question.")
+            print(f"📊 Question {idx} score: {score}/100")
+            
+            # Provide brief feedback
+            if len(evaluation['strengths']) > 0:
+                print(f"✅ Key strength: {evaluation['strengths'][0]}")
+            if len(evaluation['improvement_suggestions']) > 0:
+                print(f"💡 Improvement tip: {evaluation['improvement_suggestions'][0]}")
+                
+        else:
+            speak_text("Thank you for your response. Consider providing more detailed answers.")
+            all_evaluations.append({
+                "overall_score": 20,
+                "category_scores": {"technical_accuracy": 4, "completeness": 4, "communication": 4, "problem_solving": 4, "relevance": 4},
+                "strengths": ["Attempted to answer"],
+                "weaknesses": ["Response too brief", "Lacks technical detail"],
+                "detailed_feedback": "Answer was too brief to properly evaluate technical knowledge and communication skills.",
+                "detailed_explanation": "This answer received 20/100 points due to its brevity. Brief answers make it difficult to assess technical competency, problem-solving abilities, and communication skills. In a technical interview, detailed responses that demonstrate understanding of concepts, provide examples, and show logical thinking are essential for proper evaluation.",
+                "improvement_suggestions": ["Provide more detailed responses", "Include specific examples", "Elaborate on technical concepts"],
+                "interviewer_notes": "May need encouragement to provide more comprehensive answers",
+                "follow_up_questions": ["Can you elaborate on that?", "What specific experience do you have with this?"]
+            })
+
+    # Generate comprehensive assessment
+    speak_text("Thank you for completing the interview. I'm now generating your comprehensive assessment report with detailed explanations using Gemini AI.")
+    
+    print("\n🔄 Generating final assessment using Gemini AI...")
+    final_assessment = generate_final_interview_assessment(all_evaluations, resume_text)
+    
+    print("📊 Creating comprehensive interview report with detailed explanations...")
+    report_path = create_comprehensive_report(all_questions, all_answers, all_evaluations, final_assessment, resume_text)
+    
+    # Final summary
+    avg_score = sum(eval_data["overall_score"] for eval_data in all_evaluations) / len(all_evaluations)
+    
+    print("\n" + "="*60)
+    print("🎯 INTERVIEW COMPLETED - COMPREHENSIVE SUMMARY")
+    print("="*60)
+    print(f"📊 Overall Performance: {avg_score:.1f}/100")
+    print(f"🎯 Final Recommendation: {final_assessment['final_recommendation']}")
+    print(f"📈 Technical Level: {final_assessment['technical_level']}")
+    print(f"💬 Communication Rating: {final_assessment['communication_rating']}/10")
+    print(f"🧠 Problem Solving: {final_assessment['problem_solving_rating']}/10")
+    print(f"📄 Detailed Report: {report_path}")
+    print("="*60)
+    
+    speak_text(f"Your interview assessment is complete. Your overall performance score is {avg_score:.0f} out of 100. "
+               f"The recommendation is {final_assessment['final_recommendation']}. "
+               f"A comprehensive report with detailed explanations has been generated for your review.")
+    
+    print(f"\n✅ Interview session completed successfully!")
+    print(f"📁 Open '{report_path}' for your detailed assessment report with explanations.")

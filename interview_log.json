@@ -1,0 +1,27 @@
+{
+  "session_id": "20250911_230655",
+  "started_at": "2025-09-11T23:06:55.748021",
+  "eye_contact": {
+    "center": 0,
+    "left": 0,
+    "right": 0,
+    "down": 0,
+    "examples": []
+  },
+  "posture": {
+    "correct": 0,
+    "incorrect": 0,
+    "examples": []
+  },
+  "hand_movements": {
+    "detected": 0,
+    "examples": []
+  },
+  "objects_detected": {
+    "gadgets": [],
+    "examples": []
+  },
+  "frames_processed": 163,
+  "duration_sec": 0.0,
+  "ended_at": "2025-09-11T23:07:19.154546"
+}

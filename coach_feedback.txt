@@ -1,0 +1,20 @@
+Executive Summary:
+
+The candidate's mock interview (session ID: 20250911_230655) lacked sufficient data for a comprehensive performance evaluation.  The automated system did not detect any instances of poor eye contact, incorrect posture, excessive hand movements, or distracting objects. However, the lack of positive observations also limits the assessment.  The short duration (0.0 seconds reported, though the session lasted approximately 23 seconds) suggests either a technical issue with data recording or an extremely brief interview.
+
+
+Observations:
+
+* Insufficient Data: The most significant observation is the absence of data points across all analyzed categories (eye contact, posture, hand movements, objects).  All metrics registered zero instances of positive or negative behaviors. This lack of data prevents a meaningful assessment of the candidate's nonverbal communication.  The discrepancy between the reported duration of 0.0 seconds and the actual session duration (approximately 23 seconds) indicates a potential problem with the logging system.
+* Missing Examples: The absence of example images ("examples": []) further hinders the analysis.  Visual examples would be crucial for identifying specific areas for improvement.
+* Short Duration:  The extremely short interview duration likely prevented the system from adequately capturing a representative sample of the candidate's behavior.
+
+
+Actionable Tips:
+
+* Investigate Data Collection Issues: The primary action is to troubleshoot the data collection system.  Determine why no data points were recorded and address any technical problems that may have prevented proper logging.
+* Conduct a Full Mock Interview:  A complete retake of the mock interview is necessary to gather sufficient data for meaningful analysis.  Ensure the recording equipment is functioning correctly and the recording session is sufficiently long to observe the candidate's behavior.
+* Focus on Holistic Feedback:  When reviewing the new data, prioritize feedback that considers not only nonverbal communication but also verbal responses, content of answers, and overall presentation. The nonverbal observations are only a part of the larger picture.
+* Provide Specific, Actionable Feedback:  Based on the analysis of a properly recorded interview, provide concrete and actionable suggestions for improvements, drawing on specific examples from the recording.
+
+Without reliable data, it's impossible to provide personalized actionable tips beyond addressing the systemic issues.
