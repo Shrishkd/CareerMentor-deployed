@@ -15,7 +15,7 @@ lerna-debug.log*
 /dist-ssr
 
 # Environment
-.env*
+.env
 *.local
 
 # User uploads & virtual envs
