@@ -9,8 +9,6 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Tuple
-from dotenv import load_dotenv
-load_dotenv()
 
 # mediapipe typically imported as mp; if not installed the script will fail at import
 try:
@@ -19,20 +17,12 @@ try:
 except Exception:
     MP_AVAILABLE = False
 
+# optional LLM helper; if not available function will return simple coaching text
 try:
     import google.generativeai as genai
-    GENAI_AVAILABLE = False
-    api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    if api_key:
-        genai.configure(api_key=api_key)
-        GENAI_AVAILABLE = True
-    else:
-        print("❌ No Gemini API key found in env. Set GOOGLE_API_KEY to enable Gemini.")
+    GENAI_AVAILABLE = True
 except Exception:
     GENAI_AVAILABLE = False
-    print("❌ google.generativeai library not available (pip install google-generativeai).")
-
-
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm

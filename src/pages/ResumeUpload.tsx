@@ -7,7 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { motion } from 'framer-motion';
-import { safeFetch } from '@/lib/api';
+
+// ✅ Define API base correctly
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 const ResumeUpload: React.FC = () => {
   const navigate = useNavigate();
@@ -24,12 +26,18 @@ const ResumeUpload: React.FC = () => {
       const formData = new FormData();
       formData.append('resume', uploadedFile);
 
-      console.log('📤 Uploading resume to backend.');
+      console.log('📤 Uploading resume to backend:', `${API_BASE}/api/upload-resume`);
 
-      const data = await safeFetch('/api/upload-resume', {
+      const res = await fetch(`${API_BASE}/api/upload-resume`, {
         method: 'POST',
         body: formData,
       });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status} : ${await res.text()}`);
+      }
+
+      const data = await res.json();
 
       if (data && data.session_id) {
         console.log('✅ Resume uploaded successfully');
@@ -41,9 +49,8 @@ const ResumeUpload: React.FC = () => {
           question_count: data.question_count || (data.questions ? data.questions.length : 0),
           resume_path: data.resume_path || null,
           created_at: new Date().toISOString(),
-          // permissions will be filled in GrantPermissions page
           permissions: { mic: false, camera: false },
-          permissions_granted: false
+          permissions_granted: false,
         };
 
         localStorage.setItem('interview_session', JSON.stringify(sessionObj));
@@ -53,7 +60,6 @@ const ResumeUpload: React.FC = () => {
           description: `Generated ${sessionObj.question_count} personalized questions!`,
         });
 
-        // go to permissions step
         navigate('/grant-permissions');
       } else {
         throw new Error('Invalid response from server - no session ID received');
@@ -66,37 +72,40 @@ const ResumeUpload: React.FC = () => {
       toast({
         title: "Upload Failed",
         description: errorMessage,
-        variant: "destructive"
+        variant: "destructive",
       });
     } finally {
       setUploading(false);
     }
   };
 
-  const onDrop = useCallback((acceptedFiles: File[], rejectedFiles: any[]) => {
-    if (rejectedFiles.length > 0) {
-      setError('Please upload only PDF files (max 10MB)');
-      toast({
-        title: "Invalid File",
-        description: "Please upload only PDF files (max 10MB)",
-        variant: "destructive"
-      });
-      return;
-    }
+  const onDrop = useCallback(
+    (acceptedFiles: File[], rejectedFiles: any[]) => {
+      if (rejectedFiles.length > 0) {
+        setError('Please upload only PDF files (max 10MB)');
+        toast({
+          title: "Invalid File",
+          description: "Please upload only PDF files (max 10MB)",
+          variant: "destructive",
+        });
+        return;
+      }
 
-    if (acceptedFiles.length > 0) {
-      const uploadedFile = acceptedFiles[0];
-      setFile(uploadedFile);
-      setError(null);
-      handleUpload(uploadedFile);
-    }
-  }, [toast]);
+      if (acceptedFiles.length > 0) {
+        const uploadedFile = acceptedFiles[0];
+        setFile(uploadedFile);
+        setError(null);
+        handleUpload(uploadedFile);
+      }
+    },
+    [toast]
+  );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: { 'application/pdf': ['.pdf'] },
     maxSize: 10 * 1024 * 1024, // 10MB
-    multiple: false
+    multiple: false,
   });
 
   const removeFile = () => {
@@ -111,7 +120,12 @@ const ResumeUpload: React.FC = () => {
           <Card>
             <CardContent className="p-8">
               <h2 className="text-2xl font-bold mb-4">Upload your Resume (PDF)</h2>
-              <div {...getRootProps()} className={`border-2 border-dashed rounded p-6 text-center cursor-pointer ${isDragActive ? 'border-primary' : 'border-muted'}`}>
+              <div
+                {...getRootProps()}
+                className={`border-2 border-dashed rounded p-6 text-center cursor-pointer ${
+                  isDragActive ? 'border-primary' : 'border-muted'
+                }`}
+              >
                 <input {...getInputProps()} />
                 {!file ? (
                   <div>
@@ -124,7 +138,9 @@ const ResumeUpload: React.FC = () => {
                       <FileText />
                       <span>{file.name}</span>
                     </div>
-                    <Button variant="ghost" onClick={removeFile}><X /></Button>
+                    <Button variant="ghost" onClick={removeFile}>
+                      <X />
+                    </Button>
                   </div>
                 )}
               </div>
@@ -132,13 +148,21 @@ const ResumeUpload: React.FC = () => {
               {error && <p className="text-sm text-destructive mt-4">{error}</p>}
 
               <div className="flex justify-between items-center mt-8">
-                <Button variant="outline" onClick={() => navigate(-1)} disabled={uploading} className="flex items-center">
+                <Button
+                  variant="outline"
+                  onClick={() => navigate(-1)}
+                  disabled={uploading}
+                  className="flex items-center"
+                >
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Back
                 </Button>
 
                 {file && !uploading && !error && (
-                  <Button onClick={() => navigate('/grant-permissions')} className="bg-gradient-to-r from-primary to-accent hover:opacity-90 flex items-center">
+                  <Button
+                    onClick={() => navigate('/grant-permissions')}
+                    className="bg-gradient-to-r from-primary to-accent hover:opacity-90 flex items-center"
+                  >
                     Continue to Permissions
                     <ArrowRight className="h-4 w-4 ml-2" />
                   </Button>
@@ -148,7 +172,6 @@ const ResumeUpload: React.FC = () => {
           </Card>
         </motion.div>
 
-        {/* Flow Indicator */}
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5, delay: 0.3 }} className="mt-8 text-center">
           <div className="flex items-center justify-center space-x-4 text-sm text-muted-foreground">
             <span className="text-primary font-medium">1. Start Interview</span>

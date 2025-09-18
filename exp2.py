@@ -164,7 +164,7 @@ def parse_questions_properly(questions_text):
             question = re.sub(r'^\*\*[^*]*\*\*:?\s*', '', question)  # Remove **Theoretical:** etc.
             question = question.strip()
             
-            # Only add substantial questions (not headers or intro text)
+            # Only add substantial qustions (not headers or intro text)
             if len(question) > 20 and not any(skip_word in question.lower() for skip_word in 
                                             ['here are', 'questions for', 'tailored to', 'interview questions']):
                 questions.append(question)
@@ -246,6 +246,7 @@ RESPONSE FORMAT (STRICT JSON):
                 elif key == "category_scores":
                     evaluation[key] = {"technical_accuracy": 12, "completeness": 12, "communication": 12, "problem_solving": 12, "relevance": 6}
         
+        
         return evaluation
         
     except json.JSONDecodeError as e:
@@ -279,6 +280,91 @@ RESPONSE FORMAT (STRICT JSON):
             ],
             "interviewer_notes": "Evaluation generated using fallback method due to response parsing issues",
             "follow_up_questions": ["Can you elaborate on that?", "What specific experience do you have with this?"]
+        }
+        
+def evaluate_code_answer(question, code_text, resume_context=""):
+    """Specialized evaluation for coding interview answers using Gemini with detailed explanations."""
+
+    prompt = f"""
+As a senior software engineering interviewer, evaluate the candidate's coding solution.
+
+QUESTION: {question}
+
+CANDIDATE'S CODE:
+{code_text}
+
+CANDIDATE BACKGROUND: {resume_context[:500]}...
+
+EVALUATION CRITERIA:
+1. Correctness (0-40 points) - Does the code solve the problem correctly?
+2. Efficiency (0-20 points) - Is the solution optimized for time and space?
+3. Code Quality (0-15 points) - Readability, structure, variable naming.
+4. Edge Cases (0-15 points) - Does it handle unusual/invalid inputs gracefully?
+5. Communication (0-10 points) - Clarity of any explanations or comments.
+
+RESPONSE FORMAT (STRICT JSON):
+{{
+  "overall_score": 80,
+  "category_scores": {{
+    "correctness": 30,
+    "efficiency": 15,
+    "code_quality": 12,
+    "edge_cases": 10,
+    "communication": 8
+  }},
+  "strengths": ["Implements correct algorithm", "Readable structure"],
+  "weaknesses": ["No edge case handling", "Could optimize further"],
+  "detailed_feedback": "The code solves the main problem correctly but does not handle edge cases. Variable naming is clear. Efficiency could be improved.",
+  "detailed_explanation": "Overall score 80/100: correctness strong (30/40), efficiency decent (15/20), code quality good (12/15). Misses edge cases (10/15). Communication acceptable (8/10).",
+  "improvement_suggestions": ["Add edge case handling", "Optimize loops", "Include comments"],
+  "interviewer_notes": "Candidate shows strong fundamentals but should improve robustness.",
+  "follow_up_questions": ["What is the time complexity?", "How would you handle invalid inputs?"]
+}}
+"""
+
+    print("🔄 Evaluating CODE answer using Gemini...")
+    response = call_llm(prompt, temperature=0.3, max_tokens=3000)
+
+    try:
+        response_clean = (response or "").strip()
+        if response_clean.startswith("```"):
+            response_clean = response_clean.split("```")[1]
+        response_clean = response_clean.strip()
+
+        try:
+            evaluation = json.loads(response_clean)
+        except Exception:
+            print("⚠️ Gemini returned invalid JSON, using fallback")
+            evaluation = {
+                "overall_score": 50,
+                "category_scores": {},
+                "strengths": [],
+                "weaknesses": ["Gemini output could not be parsed"],
+                "detailed_feedback": response_clean[:500],
+                "detailed_explanation": "Fallback evaluation: Gemini did not return valid JSON.",
+            }
+
+        print(f"✅ Parsed code evaluation. Score: {evaluation.get('overall_score', 'N/A')}/100")
+
+        required_keys = [
+            "overall_score", "category_scores", "strengths",
+            "weaknesses", "detailed_feedback", "detailed_explanation"
+        ]
+        for key in required_keys:
+            if key not in evaluation:
+                evaluation[key] = "N/A"
+
+        return evaluation
+
+    except Exception as e:
+        print("⚠️ evaluate_code_answer error:", e)
+        return {
+            "overall_score": 50,
+            "category_scores": {},
+            "strengths": [],
+            "weaknesses": ["Error parsing AI evaluation"],
+            "detailed_feedback": "Evaluation fallback used.",
+            "detailed_explanation": str(e),
         }
 
 # ========== Keep all your existing audio functions (smart_audio_recording, etc.) ==========
@@ -480,273 +566,209 @@ def speak_text(text, voice_id=None):
 
 # ========== Enhanced Report Generation with Detailed Explanations ==========
 def create_comprehensive_report(questions, answers, evaluations, final_assessment, resume_text):
-    print("🔄 Creating comprehensive report with detailed explanations...")
-    
+    import matplotlib
+    try:
+        # Use non-interactive backend for server environments
+        matplotlib.use('Agg')
+    except Exception as e:
+        print("⚠️ Could not switch matplotlib backend to Agg:", e)
+
+    print("🔄 Creating comprehensive report with detailed explanations (robust mode)...")
+
     def clean_text_for_pdf(text):
         """Clean text to remove problematic Unicode characters for PDF generation"""
-        # Replace problematic Unicode characters
         replacements = {
-            '•': '- ',
-            '✓': '+ ',
-            '✗': '- ',
-            '→': '-> ',
-            '←': '<- ',
-            '↑': '^ ',
-            '↓': 'v ',
-            '★': '* ',
-            '☆': '* ',
-            '♦': '* ',
-            '▪': '* ',
-            '▫': '* ',
-            '◦': '* ',
-            '◘': '* ',
-            '○': '* ',
-            '●': '* ',
-            '■': '* ',
-            '□': '* ',
-            '▲': '* ',
-            '▼': '* ',
-            '►': '> ',
-            '◄': '< ',
-            ''': "'",
-            ''': "'",
-            '"': '"',
-            '"': '"',
-            '…': '...',
-            '–': '-',
-            '—': '-',
-            '\u2013': '-',
-            '\u2014': '-',
-            '\u2018': "'",
-            '\u2019': "'",
-            '\u201c': '"',
-            '\u201d': '"',
-            '\u2026': '...',
-            '\u2022': '- '
+            '•': '- ', '✓': '+ ', '✗': '- ', '→': '-> ', '←': '<- ', '↑': '^ ',
+            '↓': 'v ', '★': '* ', '☆': '* ', '…': '...', '–': '-', '—': '-',
+            '\u2013': '-', '\u2014': '-', '\u2018': "'", '\u2019': "'", '\u201c': '"',
+            '\u201d': '"', '\u2026': '...', '\u2022': '- '
         }
-        
         if not isinstance(text, str):
-            text = str(text)
-        
+            try:
+                text = str(text)
+            except Exception:
+                text = ""
         for old, new in replacements.items():
             text = text.replace(old, new)
-        
-        # Remove any remaining problematic characters
-        text = text.encode('ascii', 'ignore').decode('ascii')
-        return text
-    
-    scores = [eval_data["overall_score"] for eval_data in evaluations]
+        return text.encode('ascii', 'ignore').decode('ascii')
+
+    # --- Normalise evaluations to a safe structure (defensive) ---
+    norm_evals = []
+    for ev in (evaluations or []):
+        ev_obj = {}
+        try:
+            if isinstance(ev, str):
+                try:
+                    ev_obj = json.loads(ev)
+                except Exception:
+                    ev_obj = {"detailed_feedback": ev}
+            elif isinstance(ev, dict):
+                ev_obj = ev
+            else:
+                ev_obj = {"detailed_feedback": str(ev)}
+        except Exception:
+            ev_obj = {"detailed_feedback": "Invalid evaluation format"}
+
+        safe = {
+            "overall_score": int(ev_obj.get("overall_score", 0) or 0),
+            "category_scores": ev_obj.get("category_scores", {}) if isinstance(ev_obj.get("category_scores", {}), dict) else {},
+            "strengths": ev_obj.get("strengths", []) if isinstance(ev_obj.get("strengths", []), list) else [str(ev_obj.get("strengths", ""))],
+            "weaknesses": ev_obj.get("weaknesses", []) if isinstance(ev_obj.get("weaknesses", []), list) else [str(ev_obj.get("weaknesses", ""))],
+            "detailed_feedback": ev_obj.get("detailed_feedback", ev_obj.get("detailed_explanation", "No feedback provided.")),
+            "detailed_explanation": ev_obj.get("detailed_explanation", ev_obj.get("detailed_feedback", "No detailed explanation available.")),
+            "improvement_suggestions": ev_obj.get("improvement_suggestions", []) if isinstance(ev_obj.get("improvement_suggestions", []), list) else [str(ev_obj.get("improvement_suggestions", ""))],
+            "interviewer_notes": ev_obj.get("interviewer_notes", ""),
+            "follow_up_questions": ev_obj.get("follow_up_questions", [])
+        }
+        norm_evals.append(safe)
+
+    # Safe score list
+    scores = [e.get("overall_score", 0) for e in norm_evals] if norm_evals else []
+    avg_score = (sum(scores) / len(scores)) if scores else 0.0
+
+    # Short question labels
     questions_short = [f"Q{i+1}" for i in range(len(questions))]
-    
-    # Create performance visualization
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
-    
-    # Overall scores plot
-    ax1.plot(questions_short, scores, marker='o', linestyle='-', linewidth=3, markersize=10, color='#2E86AB')
-    ax1.set_title('Interview Performance Analysis', fontsize=16, fontweight='bold')
-    ax1.set_xlabel('Questions', fontsize=12)
-    ax1.set_ylabel('Score (%)', fontsize=12)
-    ax1.set_ylim(0, 100)
-    ax1.grid(True, alpha=0.3)
-    ax1.axhline(y=70, color='green', linestyle='--', alpha=0.5, label='Good Performance')
-    ax1.axhline(y=50, color='orange', linestyle='--', alpha=0.5, label='Average Performance') 
-    ax1.legend()
-    
-    for i, score in enumerate(scores):
-        ax1.annotate(f'{score}%', (questions_short[i], score), 
-                    textcoords="offset points", xytext=(0,15), ha='center', fontweight='bold')
-    
-    # Category breakdown for first question
-    if evaluations and "category_scores" in evaluations[0]:
-        categories = list(evaluations[0]["category_scores"].keys())
-        category_scores = [evaluations[0]["category_scores"][cat] for cat in categories]
-        
-        ax2.bar(categories, category_scores, color=['#A23B72', '#F18F01', '#C73E1D', '#593E2A', '#2E86AB'])
-        ax2.set_title('Performance Breakdown (Sample Question)', fontsize=14, fontweight='bold')
-        ax2.set_ylabel('Score', fontsize=12)
-        ax2.tick_params(axis='x', rotation=45)
-    
-    plt.tight_layout()
-    graph_path = "comprehensive_interview_analysis.png"
-    plt.savefig(graph_path, dpi=300, bbox_inches='tight')
-    plt.close()
-    
-    # Create PDF report
+
+    # Create performance visualization (Agg backend prevents GUI errors)
+    try:
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+        ax1.plot(questions_short if questions_short else ['Q1'], scores if scores else [0],
+                 marker='o', linestyle='-', linewidth=3, markersize=8)
+        ax1.set_title('Interview Performance Analysis')
+        ax1.set_xlabel('Questions')
+        ax1.set_ylabel('Score (%)')
+        ax1.set_ylim(0, 100)
+        ax1.grid(True, alpha=0.3)
+        ax1.axhline(y=70, linestyle='--', alpha=0.5, label='Good Performance')
+        ax1.axhline(y=50, linestyle='--', alpha=0.5, label='Average Performance')
+        ax1.legend()
+
+        for i, score in enumerate(scores):
+            ax1.annotate(f'{score}%', (questions_short[i], score), textcoords="offset points", xytext=(0,10), ha='center')
+
+        if norm_evals and isinstance(norm_evals[0].get("category_scores", None), dict) and len(norm_evals[0]["category_scores"]) > 0:
+            categories = list(norm_evals[0]["category_scores"].keys())
+            category_scores = [norm_evals[0]["category_scores"].get(c, 0) for c in categories]
+            ax2.bar(categories, category_scores)
+            ax2.set_title('Performance Breakdown (Sample Question)')
+            ax2.tick_params(axis='x', rotation=45)
+        else:
+            ax2.text(0.1, 0.5, "No detailed category scores available", transform=ax2.transAxes)
+
+        plt.tight_layout()
+        graph_path = "comprehensive_interview_analysis.png"
+        plt.savefig(graph_path, dpi=200, bbox_inches='tight')
+        plt.close()
+    except Exception as e:
+        print("⚠️ Failed to create performance graph:", e)
+        graph_path = None
+
+    # Create PDF report (FPDF)
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
-    
-    # Cover Page
+
+    # Cover
     pdf.add_page()
-    pdf.set_font("Arial", style='B', size=20)
-    pdf.cell(0, 20, "COMPREHENSIVE INTERVIEW ASSESSMENT", ln=True, align='C')
-    
-    pdf.set_font("Arial", size=14)
-    pdf.ln(10)
-    pdf.cell(0, 10, f"Date: {datetime.now().strftime('%A, %B %d, %Y at %I:%M %p')}", ln=True)
-    pdf.cell(0, 10, "Assessment System: AI-Powered Interview Analysis", ln=True)
-    pdf.cell(0, 10, f"Speech Recognition: {'Whisper AI (Offline)' if WHISPER_AVAILABLE else 'Google STT (Online)'}", ln=True)
-    
-    # Executive Summary
-    pdf.ln(15)
-    pdf.set_font("Arial", style='B', size=16)
-    pdf.cell(0, 10, "EXECUTIVE SUMMARY", ln=True)
-    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-    pdf.ln(5)
-    
-    pdf.set_font("Arial", style='B', size=14)
-    pdf.cell(0, 10, f"Overall Recommendation: {clean_text_for_pdf(final_assessment['final_recommendation'])}", ln=True)
-    pdf.cell(0, 10, f"Confidence Level: {final_assessment['confidence_level']}/10", ln=True)
-    pdf.cell(0, 10, f"Average Score: {sum(scores)/len(scores):.1f}%", ln=True)
-    
+    pdf.set_font("Arial", style='B', size=18)
+    pdf.cell(0, 12, "COMPREHENSIVE INTERVIEW ASSESSMENT", ln=True, align='C')
     pdf.set_font("Arial", size=11)
-    pdf.ln(5)
-    pdf.multi_cell(0, 6, clean_text_for_pdf(final_assessment['overall_assessment']))
-    
-    # Performance Overview
-    pdf.add_page()
-    pdf.set_font("Arial", style='B', size=16)
-    pdf.cell(0, 10, "PERFORMANCE OVERVIEW", ln=True)
-    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-    pdf.ln(5)
-    
-    pdf.image(graph_path, x=10, y=40, w=190)
-    pdf.ln(140)
-    
-    # Key Findings
+    pdf.ln(6)
+    pdf.cell(0, 7, f"Date: {datetime.now().strftime('%A, %B %d, %Y at %I:%M %p')}", ln=True)
+    pdf.cell(0, 7, f"Average Score: {avg_score:.1f}%", ln=True)
+    pdf.ln(6)
+    pdf.multi_cell(0, 6, clean_text_for_pdf(final_assessment.get('overall_assessment', 'No overall assessment provided.')))
+
+    # Performance Overview with graph
     pdf.add_page()
     pdf.set_font("Arial", style='B', size=14)
-    pdf.cell(0, 10, "KEY STRENGTHS:", ln=True)
-    pdf.set_font("Arial", size=11)
-    for strength in final_assessment['key_strengths']:
-        pdf.cell(0, 6, f"- {clean_text_for_pdf(strength)}", ln=True)
-    
-    pdf.ln(5)
-    pdf.set_font("Arial", style='B', size=14)
-    pdf.cell(0, 10, "DEVELOPMENT AREAS:", ln=True)
-    pdf.set_font("Arial", size=11)
-    for area in final_assessment['development_areas']:
-        pdf.cell(0, 6, f"- {clean_text_for_pdf(area)}", ln=True)
-    
-    # Detailed Question Analysis with Explanations
+    pdf.cell(0, 8, "PERFORMANCE OVERVIEW", ln=True)
+    pdf.ln(6)
+    if graph_path and os.path.exists(graph_path):
+        try:
+            pdf.image(graph_path, x=10, y=pdf.get_y(), w=190)
+            pdf.ln(100)
+        except Exception as e:
+            print("⚠️ Could not attach graph to PDF:", e)
+            pdf.multi_cell(0, 6, "Graph generation was not available.")
+    else:
+        pdf.multi_cell(0, 6, "No performance graph available.")
+
+    # Key findings
     pdf.add_page()
-    pdf.set_font("Arial", style='B', size=16)
-    pdf.cell(0, 10, "DETAILED QUESTION ANALYSIS WITH EXPLANATIONS", ln=True)
-    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-    pdf.ln(10)
-    
-    for i, (question, answer, evaluation) in enumerate(zip(questions, answers, evaluations)):
-        if pdf.get_y() > 230:  # Start new page if needed
+    pdf.set_font("Arial", style='B', size=12)
+    pdf.cell(0, 8, "KEY STRENGTHS:", ln=True)
+    pdf.set_font("Arial", size=10)
+    for s in final_assessment.get('key_strengths', []):
+        pdf.cell(0, 6, f"- {clean_text_for_pdf(s)}", ln=True)
+
+    pdf.ln(4)
+    pdf.set_font("Arial", style='B', size=12)
+    pdf.cell(0, 8, "DEVELOPMENT AREAS:", ln=True)
+    pdf.set_font("Arial", size=10)
+    for a in final_assessment.get('development_areas', []):
+        pdf.cell(0, 6, f"- {clean_text_for_pdf(a)}", ln=True)
+
+    # Detailed question-by-question analysis
+    pdf.add_page()
+    pdf.set_font("Arial", style='B', size=14)
+    pdf.cell(0, 8, "DETAILED QUESTION ANALYSIS", ln=True)
+    pdf.ln(6)
+    for i, (q, a, ev) in enumerate(zip(questions, answers, norm_evals)):
+        if pdf.get_y() > 240:
             pdf.add_page()
-        
-        pdf.set_font("Arial", style='B', size=12)
-        pdf.cell(0, 8, f"Question {i+1}:", ln=True)
-        pdf.set_font("Arial", size=10)
-        pdf.multi_cell(0, 6, clean_text_for_pdf(question))
-        pdf.ln(2)
-        
         pdf.set_font("Arial", style='B', size=11)
-        pdf.cell(0, 6, f"Overall Score: {evaluation['overall_score']}/100", ln=True)
-        
-        # Category scores if available
-        if "category_scores" in evaluation:
-            pdf.set_font("Arial", size=10)
-            for category, score in evaluation["category_scores"].items():
-                category_clean = clean_text_for_pdf(category.replace('_', ' ').title())
-                pdf.cell(0, 5, f"  - {category_clean}: {score}", ln=True)
-        
-        # Candidate's Answer (truncated)
+        pdf.multi_cell(0, 6, f"Question {i+1}: {clean_text_for_pdf(q)}")
+        pdf.ln(2)
+        pdf.set_font("Arial", size=10)
+        pdf.cell(0, 6, f"Overall Score: {ev.get('overall_score', 0)}/100", ln=True)
+        # category scores
+        if ev.get("category_scores"):
+            for cat, sc in ev.get("category_scores", {}).items():
+                pdf.cell(0, 5, f"  - {clean_text_for_pdf(cat.replace('_',' ').title())}: {sc}", ln=True)
         pdf.ln(2)
         pdf.set_font("Arial", style='B', size=10)
         pdf.cell(0, 5, "Candidate's Answer:", ln=True)
         pdf.set_font("Arial", style='I', size=9)
-        answer_text = clean_text_for_pdf(answer[:300] + "..." if len(answer) > 300 else answer)
-        pdf.multi_cell(0, 4, f'"{answer_text}"')
-        
-        # Detailed Explanation Section
-        pdf.ln(3)
-        pdf.set_font("Arial", style='B', size=10)
-        pdf.cell(0, 5, "Why This Answer Received This Score:", ln=True)
-        pdf.set_font("Arial", size=9)
-        explanation = evaluation.get('detailed_explanation', evaluation.get('detailed_feedback', 'No detailed explanation available.'))
-        pdf.multi_cell(0, 4, clean_text_for_pdf(explanation))
-        
-        # Brief Feedback
+        ans_text = a if isinstance(a, str) else str(a)
+        pdf.multi_cell(0, 5, clean_text_for_pdf((ans_text[:400] + '...') if len(ans_text) > 400 else ans_text))
         pdf.ln(2)
-        pdf.set_font("Arial", style='B', size=10)
-        pdf.cell(0, 5, "Brief Feedback:", ln=True)
         pdf.set_font("Arial", size=9)
-        pdf.multi_cell(0, 4, clean_text_for_pdf(evaluation['detailed_feedback']))
-        
-        # Strengths and Weaknesses
+        explanation = ev.get('detailed_explanation') or ev.get('detailed_feedback') or "No detailed explanation available."
+        pdf.multi_cell(0, 5, clean_text_for_pdf(explanation))
         pdf.ln(2)
         pdf.set_font("Arial", style='B', size=9)
-        pdf.cell(0, 4, "Strengths:", ln=True)
-        pdf.set_font("Arial", size=8)
-        for strength in evaluation['strengths'][:2]:
-            pdf.multi_cell(0, 3, f"  + {clean_text_for_pdf(strength)}")
-        
-        pdf.set_font("Arial", style='B', size=9)
-        pdf.cell(0, 4, "Areas for Improvement:", ln=True)
-        pdf.set_font("Arial", size=8)
-        for weakness in evaluation['weaknesses'][:2]:
-            pdf.multi_cell(0, 3, f"  - {clean_text_for_pdf(weakness)}")
-        
-        # Improvement Suggestions
-        pdf.ln(1)
-        pdf.set_font("Arial", style='B', size=9)
-        pdf.cell(0, 4, "Improvement Suggestions:", ln=True)
-        pdf.set_font("Arial", size=8)
-        for suggestion in evaluation['improvement_suggestions'][:3]:
-            pdf.multi_cell(0, 3, f"  - {clean_text_for_pdf(suggestion)}")
-        
-        pdf.ln(5)
-    
-    # Final Recommendations
+        pdf.cell(0, 5, "Improvement Suggestions:", ln=True)
+        pdf.set_font("Arial", size=9)
+        for s in ev.get('improvement_suggestions', [])[:5]:
+            pdf.multi_cell(0, 5, f" - {clean_text_for_pdf(s)}")
+        pdf.ln(4)
+
+    # Final recommendations
     pdf.add_page()
-    pdf.set_font("Arial", style='B', size=16)
-    pdf.cell(0, 10, "FINAL RECOMMENDATIONS", ln=True)
-    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-    pdf.ln(10)
-    
-    pdf.set_font("Arial", style='B', size=12)
-    pdf.cell(0, 8, f"Technical Level Assessment: {clean_text_for_pdf(final_assessment['technical_level'])}", ln=True)
-    pdf.cell(0, 8, f"Communication Rating: {final_assessment['communication_rating']}/10", ln=True)
-    pdf.cell(0, 8, f"Problem-Solving Rating: {final_assessment['problem_solving_rating']}/10", ln=True)
-    
-    pdf.ln(5)
-    pdf.set_font("Arial", style='B', size=11)
-    pdf.cell(0, 8, "Role Fit Analysis:", ln=True)
-    pdf.set_font("Arial", size=10)
-    pdf.multi_cell(0, 5, clean_text_for_pdf(final_assessment['role_fit']))
-    
-    pdf.ln(3)
-    pdf.set_font("Arial", style='B', size=11)
-    pdf.cell(0, 8, "Recommended Next Steps:", ln=True)
-    pdf.set_font("Arial", size=10)
-    pdf.multi_cell(0, 5, clean_text_for_pdf(final_assessment['next_steps']))
-    
-    # Save report
-    report_path = f"comprehensive_interview_report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
-    
+    pdf.set_font("Arial", style='B', size=14)
+    pdf.cell(0, 8, "FINAL RECOMMENDATIONS", ln=True)
+    pdf.ln(6)
+    pdf.set_font("Arial", size=11)
+    pdf.multi_cell(0, 6, clean_text_for_pdf(final_assessment.get('overall_assessment', '')))
+
+    # Save file
+    report_path = f"comprehensive_interview_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
     try:
         pdf.output(report_path)
-        print(f"✅ Report with detailed explanations generated successfully: {report_path}")
-    except UnicodeEncodeError as e:
-        print(f"❌ Unicode error in PDF generation: {e}")
-        # Try alternative approach
-        try:
-            # Force ASCII encoding
-            pdf.output(report_path, 'F')
-            print(f"✅ Report generated with ASCII encoding: {report_path}")
-        except Exception as e2:
-            print(f"❌ Failed to generate report: {e2}")
-            return None
-    
-    # Cleanup
-    if os.path.exists(graph_path):
-        os.remove(graph_path)
-    
+        print(f"✅ Report generated: {report_path}")
+    except Exception as e:
+        print("❌ Error writing PDF:", e)
+        return None
+    finally:
+        if graph_path and os.path.exists(graph_path):
+            try:
+                os.remove(graph_path)
+            except:
+                pass
+
     return report_path
+# --- END of replacement block ---
+
 
 def generate_final_interview_assessment(all_evaluations, resume_text):
     """Keep your existing final assessment function"""
