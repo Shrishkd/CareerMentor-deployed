@@ -1,0 +1,14 @@
+components.json
+favicon.ico
+FolderList.txt
+interview_log.json
+package-lock.json
+package.json
+placeholder.svg
+postcss.config.js
+robots.txt
+tailwind.config.ts
+tsconfig.app.json
+tsconfig.json
+tsconfig.node.json
+vite.config.ts
