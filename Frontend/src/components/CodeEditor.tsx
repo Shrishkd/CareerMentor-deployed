@@ -127,6 +127,17 @@ export const CodeEditor = ({ question, onCodeChange }: CodeEditorProps) => {
       return;
     }
 
+    const rapidApiKey = import.meta.env.VITE_RAPIDAPI_KEY;
+    if (!rapidApiKey) {
+      setOutput("❌ Error: RapidAPI key not configured. Please set VITE_RAPIDAPI_KEY in your environment variables.");
+      toast({
+        title: "Configuration Error",
+        description: "RapidAPI key is required for code execution. Please contact your administrator.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setIsRunning(true);
     setOutput("");
     setExecutionTime(null);
@@ -138,7 +149,7 @@ export const CodeEditor = ({ question, onCodeChange }: CodeEditorProps) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-RapidAPI-Key": process.env.RAPIDAPI_KEY || "",
+          "X-RapidAPI-Key": rapidApiKey,
           "X-RapidAPI-Host": "judge0-ce.p.rapidapi.com"
         },
         body: JSON.stringify({
@@ -192,12 +203,24 @@ export const CodeEditor = ({ question, onCodeChange }: CodeEditorProps) => {
       } else {
         setOutput(result.stdout || "No output");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Execution error:", error);
-      setOutput("Error: Unable to execute code. Please try again.");
+      let errorMessage = "Unable to execute code. Please try again.";
+      
+      if (error.message?.includes("401")) {
+        errorMessage = "Invalid API key. Please check your RapidAPI key configuration.";
+      } else if (error.message?.includes("429")) {
+        errorMessage = "Rate limit exceeded. Please try again later.";
+      } else if (error.message?.includes("403")) {
+        errorMessage = "Access forbidden. Please check your API key permissions.";
+      } else if (error.message?.includes("Network")) {
+        errorMessage = "Network error. Please check your internet connection.";
+      }
+      
+      setOutput(`❌ Error: ${errorMessage}`);
       toast({
         title: "Execution Failed",
-        description: "Unable to connect to code execution service",
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
 import Editor from "@monaco-editor/react";
 import axios from "axios";
+import DarkModeToggle from "@/components/DarkModeToggle";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const JUDGE0_URL = "https://judge0-ce.p.rapidapi.com/submissions";
@@ -421,6 +422,11 @@ const Interview: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-background py-8 px-4 sm:px-6 lg:px-8">
+      {/* Theme Toggle */}
+      <div className="fixed top-4 right-4 z-50">
+        <DarkModeToggle />
+      </div>
+      
       <div className="max-w-4xl mx-auto">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="text-center mb-8">
           <h1 className="text-4xl font-bold text-foreground mb-4">AI Interview Session</h1>

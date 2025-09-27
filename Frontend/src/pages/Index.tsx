@@ -14,6 +14,7 @@ import {
   Star
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import DarkModeToggle from "@/components/DarkModeToggle";
 
 const features = [
   {
@@ -50,6 +51,11 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Theme Toggle */}
+      <div className="fixed top-4 right-4 z-50">
+        <DarkModeToggle />
+      </div>
+      
       {/* Hero Section */}
       <section className="relative overflow-hidden bg-gradient-hero">
         <div className="absolute inset-0 bg-gradient-card backdrop-blur-3xl"></div>

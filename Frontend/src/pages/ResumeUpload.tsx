@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { motion } from 'framer-motion';
+import DarkModeToggle from '@/components/DarkModeToggle';
 
 // ✅ Define API base correctly
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
@@ -115,6 +116,11 @@ const ResumeUpload: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-background py-12 px-4 sm:px-6 lg:px-8">
+      {/* Theme Toggle */}
+      <div className="fixed top-4 right-4 z-50">
+        <DarkModeToggle />
+      </div>
+      
       <div className="max-w-4xl mx-auto">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
           <Card>
