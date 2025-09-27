@@ -9,8 +9,8 @@ import livevid1
 import shutil 
 from supabase import create_client
 
-SUPABASE_URL = os.getenv("https://ykgrfbyklumuygknxrkk.supabase.co")
-SUPABASE_KEY = os.getenv("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlrZ3JmYnlrbHVtdXlna254cmtrIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjQ4NzAwOCwiZXhwIjoyMDcyMDYzMDA4fQ.tccKkhi7znmbf8pzPKH1auCHdJiEpQk-e6dKCfwFslQ") or os.getenv("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlrZ3JmYnlrbHVtdXlna254cmtrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0ODcwMDgsImV4cCI6MjA3MjA2MzAwOH0.lbShYAXNPGnIN4RzT4pOSB-Z07bS8j8tToyeRHKTgRg")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
 SUPABASE_BUCKET_REPORTS = os.getenv("SUPABASE_BUCKET_REPORTS", "careerMentor")
 USE_SUPABASE = bool(SUPABASE_URL and SUPABASE_KEY)
 
