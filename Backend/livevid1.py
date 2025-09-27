@@ -32,9 +32,10 @@ from reportlab.lib.utils import ImageReader
 from PIL import Image
 
 # Paths
-BASE_DIR = Path.cwd()
-REPORT_DIR = BASE_DIR / "reports"
-EVIDENCE_DIR = BASE_DIR / "reports" / "evidence"
+BASE_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = BASE_DIR.parent
+REPORT_DIR = PROJECT_ROOT / "reports"
+EVIDENCE_DIR = REPORT_DIR / "evidence"
 REPORT_DIR.mkdir(parents=True, exist_ok=True)
 EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -252,10 +253,13 @@ def process_frame(frame, mp_face_mesh, face_mesh, pose, hands, prev_state, frame
     return prev_state
 
 # ---------------- run_monitor_for_session wrapper ----------------
-def run_monitor_for_session(session_id: str, duration_sec: int = 180) -> Tuple[dict, str]:
+def run_monitor_for_session(session_id: str, duration_sec: int = 180) -> Tuple[dict, str, dict]:
     """
     Run camera monitoring for duration_sec seconds (non-interactive).
-    Returns: (log_dict, pdf_path)
+    Returns: (log_dict, report_path, meta)
+    - log_dict: raw monitoring log
+    - report_path: local filesystem path
+    - meta: dict {storage, path, url} (supabase if available, else local)
     """
     if not MP_AVAILABLE:
         raise RuntimeError("mediapipe not installed or not available on this environment")
@@ -269,10 +273,9 @@ def run_monitor_for_session(session_id: str, duration_sec: int = 180) -> Tuple[d
     mp_pose = mp.solutions.pose if MP_AVAILABLE else None
     mp_hands = mp.solutions.hands if MP_AVAILABLE else None
 
-    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)  # try directshow on Windows; on linux default is fine
+    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)  # Windows default
     if not cap.isOpened():
-        # attempt without cv2.CAP_DSHOW
-        cap = cv2.VideoCapture(0)
+        cap = cv2.VideoCapture(0)  # fallback
         if not cap.isOpened():
             raise RuntimeError("Webcam not accessible - ensure device has a camera and server has permission")
 
@@ -288,20 +291,17 @@ def run_monitor_for_session(session_id: str, duration_sec: int = 180) -> Tuple[d
                 frame_id += 1
                 prev_state = process_frame(frame, mp_face_mesh, face_mesh, pose, hands, prev_state, frame_id, log, session_id)
 
-                # Optional: show live window for debugging (comment out in headless servers)
+                # optional live preview (disabled on servers)
                 try:
                     cv2.imshow("Interview Monitor (press q to quit early)", frame)
                     if cv2.waitKey(1) & 0xFF == ord('q'):
                         break
                 except Exception:
-                    # headless environment can't show window, ignore
                     pass
 
-                # stop after duration
                 if (time.time() - start_ts) >= duration_sec:
                     break
 
-        # cleanup
         try:
             cap.release()
             cv2.destroyAllWindows()
@@ -311,28 +311,52 @@ def run_monitor_for_session(session_id: str, duration_sec: int = 180) -> Tuple[d
         log["ended_at"] = datetime.utcnow().isoformat()
         log["duration_sec"] = int(time.time() - start_ts)
 
-        # create coaching text via genai or fallback
+        # create coaching text
         coaching_text = get_gemini_report(log)
 
-        # build pdf path
-        pdf_name = f"Interview_Report_{session_id}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.pdf"
-        pdf_path = str(REPORT_DIR / pdf_name)
+        # ✅ build report path in repo-root /reports
+        project_root = Path(__file__).resolve().parent.parent
+        reports_dir = project_root / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
 
-        success = make_pdf_report(pdf_path, log, coaching_text)
+        pdf_name = f"Interview_Report_{session_id}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.pdf"
+        report_path = str(reports_dir / pdf_name)
+
+        success = make_pdf_report(report_path, log, coaching_text)
         if not success:
             raise RuntimeError("Failed to create PDF report")
 
-        # return log dict and pdf_path
-        return log, pdf_path
+        # ✅ optionally upload to Supabase
+        meta = {"storage": "local", "path": report_path, "url": None}
+        try:
+            from supabase import create_client
+            SUPABASE_URL = os.getenv("SUPABASE_URL")
+            SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+            SUPABASE_BUCKET_REPORTS = os.getenv("SUPABASE_BUCKET_REPORTS", "reports")
+            if SUPABASE_URL and SUPABASE_KEY:
+                supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+                storage_key = f"{session_id}/{pdf_name}"
+                with open(report_path, "rb") as f:
+                    supabase.storage.from_(SUPABASE_BUCKET_REPORTS).upload(
+                        storage_key, f, {"content-type": "application/pdf", "upsert": True}
+                    )
+                signed = supabase.storage.from_(SUPABASE_BUCKET_REPORTS).create_signed_url(
+                    storage_key, 60 * 60 * 24 * 7
+                )
+                meta = {"storage": "supabase", "path": storage_key, "url": signed["signedURL"]}
+        except Exception as e:
+            print("⚠️ Supabase upload failed:", e)
+
+        return log, report_path, meta
 
     except Exception as e:
         traceback.print_exc()
-        # ensure resources are released
         try:
             cap.release()
         except:
             pass
         raise
+
 
 # Keep original run_monitor() for direct CLI testing if desired
 def run_monitor():

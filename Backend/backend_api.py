@@ -6,11 +6,37 @@ from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import exp2
 import livevid1
+import shutil 
+from supabase import create_client
 
-UPLOAD_DIR = "uploads"
-REPORTS_DIR = "reports"
+SUPABASE_URL = os.getenv("https://ykgrfbyklumuygknxrkk.supabase.co")
+SUPABASE_KEY = os.getenv("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlrZ3JmYnlrbHVtdXlna254cmtrIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjQ4NzAwOCwiZXhwIjoyMDcyMDYzMDA4fQ.tccKkhi7znmbf8pzPKH1auCHdJiEpQk-e6dKCfwFslQ") or os.getenv("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlrZ3JmYnlrbHVtdXlna254cmtrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0ODcwMDgsImV4cCI6MjA3MjA2MzAwOH0.lbShYAXNPGnIN4RzT4pOSB-Z07bS8j8tToyeRHKTgRg")
+SUPABASE_BUCKET_REPORTS = os.getenv("SUPABASE_BUCKET_REPORTS", "careerMentor")
+USE_SUPABASE = bool(SUPABASE_URL and SUPABASE_KEY)
+
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY) if USE_SUPABASE else None
+
+def store_report_and_get_url(local_path: str, session_id: str):
+    if not USE_SUPABASE:
+        return {"storage": "local", "path": local_path, "url": None}
+    storage_key = f"{session_id}/{os.path.basename(local_path)}"
+    with open(local_path, "rb") as f:
+        supabase.storage.from_(SUPABASE_BUCKET_REPORTS).upload(
+            storage_key, f, {"content-type": "application/pdf", "upsert": True}
+        )
+    signed = supabase.storage.from_(SUPABASE_BUCKET_REPORTS).create_signed_url(storage_key, 60*60*24*7)  # 7 days
+    return {"storage": "supabase", "path": storage_key, "url": signed["signedURL"]}
+
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))             # .../Backend
+PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, os.pardir)) # repo root
+
+UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")        # keep uploads inside Backend
+REPORTS_DIR = os.path.join(PROJECT_ROOT, "reports")   # write PDFs to repo-level /reports
+
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(REPORTS_DIR, exist_ok=True)
+
 
 app = Flask(__name__)
 CORS(app)
@@ -54,7 +80,7 @@ def normalize_evaluation(eval_obj, fallback_note="Evaluation fallback used"):
 
         # fallback: wrap string into feedback
         return {
-           "overall_score": 50,
+    "overall_score": 50,
     "category_scores": {},
     "strengths": [],
     "weaknesses": ["No evaluation returned"],
@@ -339,20 +365,41 @@ def generate_report():
             "next_steps": "Schedule a live technical round for deeper evaluation."
         }
 
+        # ✅ Save PDF to repo-root /reports folder
         report_path = exp2.create_comprehensive_report(
-            questions, answers, evaluations, final_assessment, resume_text
+            questions, answers, evaluations, final_assessment, resume_text,
+            output_dir=REPORTS_DIR   # <--- force to repo-root reports
         )
 
+        # ✅ Optionally upload to Supabase storage
+        meta = {"storage": "local", "path": report_path, "url": None}
+        if supabase:  # only if Supabase client configured
+            try:
+                storage_key = f"{session_id}/{os.path.basename(report_path)}"
+                with open(report_path, "rb") as f:
+                    supabase.storage.from_(SUPABASE_BUCKET_REPORTS).upload(
+                        storage_key, f, {"content-type": "application/pdf", "upsert": True}
+                    )
+                signed = supabase.storage.from_(SUPABASE_BUCKET_REPORTS).create_signed_url(
+                    storage_key, 60 * 60 * 24 * 7  # 7 days
+                )
+                meta = {"storage": "supabase", "path": storage_key, "url": signed["signedURL"]}
+            except Exception as e:
+                print("⚠️ Supabase upload failed:", e)
+
         session["report_path"] = report_path
+        session["report_meta"] = meta
 
         return jsonify({
             "report_path": report_path,
+            "report_url": meta.get("url"),
             "evaluations": evaluations
         })
 
     except Exception as e:
         print("❌ generate-report error:", e)
         return jsonify({"error": str(e)}), 500
+
 
 # =========================
 # Endpoint: download report
@@ -362,11 +409,21 @@ def download_report(session_id):
     try:
         if session_id not in active_sessions:
             return jsonify({"error": "Invalid session"}), 400
+
         session = active_sessions[session_id]
+        meta = session.get("report_meta") or {}
         report_path = session.get("report_path")
+
+        # ✅ Prefer Supabase signed URL if available
+        if meta.get("storage") == "supabase" and meta.get("url"):
+            return jsonify({"signed_url": meta["url"]})
+
+        # ✅ Otherwise fall back to local file
         if not report_path or not os.path.exists(report_path):
             return jsonify({"error": "Report not found"}), 404
+
         return send_file(report_path, as_attachment=True)
+
     except Exception as e:
         print("❌ download-report error:", e)
         return jsonify({"error": str(e)}), 500

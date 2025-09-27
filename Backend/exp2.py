@@ -756,7 +756,15 @@ def create_comprehensive_report(questions, answers, evaluations, final_assessmen
     pdf.multi_cell(0, 6, clean_text_for_pdf(final_assessment.get('overall_assessment', '')))
 
     # Save file
-    report_path = f"comprehensive_interview_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+    reports_dir = os.path.join(project_root, "reports")
+    os.makedirs(reports_dir, exist_ok=True)
+
+    report_path = os.path.join(
+        reports_dir,
+        f"comprehensive_interview_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    )
+
     try:
         pdf.output(report_path)
         print(f"✅ Report generated: {report_path}")
@@ -771,6 +779,7 @@ def create_comprehensive_report(questions, answers, evaluations, final_assessmen
                 pass
 
     return report_path
+
 # --- END of replacement block ---
 
 
