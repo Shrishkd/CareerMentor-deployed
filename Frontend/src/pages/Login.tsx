@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,13 +13,11 @@ import { supabase } from "@/lib/supabaseClient";
 export const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-  });
+  const [formData, setFormData] = useState({ email: "", password: "" });
 
   const { toast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation() as { state?: { from?: Location } };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.id]: e.target.value });
@@ -47,29 +45,25 @@ export const Login = () => {
     setIsLoading(false);
     toast({
       title: "Login Successful",
-      description: "Welcome back! Redirecting to dashboard...",
+      description: "Welcome back! Redirecting...",
     });
-    navigate("/dashboard");
+
+    const redirectTo =
+      (location.state?.from as any)?.pathname && (location.state?.from as any)?.pathname !== "/login"
+        ? (location.state?.from as any)?.pathname
+        : "/dashboard";
+
+    navigate(redirectTo, { replace: true });
   };
 
   return (
-    <AuthLayout
-      title="Welcome Back"
-      subtitle="Sign in to continue your AI interview journey"
-    >
+    <AuthLayout title="Welcome Back" subtitle="Sign in to continue your AI interview journey">
       <Card className="border-0 shadow-secondary bg-gradient-card backdrop-blur-sm">
         <CardContent className="p-6">
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Email */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-              className="space-y-2"
-            >
-              <Label htmlFor="email" className="text-sm font-medium">
-                Email Address
-              </Label>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="space-y-2">
+              <Label htmlFor="email" className="text-sm font-medium">Email Address</Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -85,15 +79,8 @@ export const Login = () => {
             </motion.div>
 
             {/* Password */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
-              className="space-y-2"
-            >
-              <Label htmlFor="password" className="text-sm font-medium">
-                Password
-              </Label>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="space-y-2">
+              <Label htmlFor="password" className="text-sm font-medium">Password</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -115,55 +102,34 @@ export const Login = () => {
               </div>
             </motion.div>
 
-            {/* Remember Me + Forgot Password */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.6 }}
-              className="flex items-center justify-between text-sm"
-            >
+            {/* Remember / Forgot */}
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }} className="flex items-center justify-between text-sm">
               <label className="flex items-center space-x-2 cursor-pointer">
                 <input type="checkbox" className="rounded border-border" />
                 <span className="text-muted-foreground">Remember me</span>
               </label>
+              
               <Link
-                to="/forgot-password"
-                className="text-primary hover:text-primary-glow transition-colors"
-              >
-                Forgot password?
+                  to="/forgot-password"
+                  className="text-primary hover:text-primary-glow transition-colors">
+                  Forgot password?
               </Link>
+
             </motion.div>
 
             {/* Submit */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.7 }}
-            >
-              <Button
-                type="submit"
-                disabled={isLoading}
-                variant="gradient"
-                className="w-full transition-all duration-300"
-              >
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}>
+              <Button type="submit" disabled={isLoading} variant="gradient" className="w-full transition-all duration-300">
                 {isLoading ? "Signing in..." : "Sign In"}
               </Button>
             </motion.div>
           </form>
 
           {/* Footer */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.8 }}
-            className="text-center mt-6 pt-6 border-t border-border/50"
-          >
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }} className="text-center mt-6 pt-6 border-t border-border/50">
             <p className="text-muted-foreground">
               Don't have an account?{" "}
-              <Link
-                to="/signup"
-                className="text-primary hover:text-primary-glow transition-colors font-medium"
-              >
+              <Link to="/signup" className="text-primary hover:text-primary-glow transition-colors font-medium">
                 Sign up here
               </Link>
             </p>

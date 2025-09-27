@@ -4,17 +4,20 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "./components/ThemeContext";
-import DarkModeToggle from "./components/DarkModeToggle";
 
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import ForgotPassword from "./pages/ForgotPassword"; 
+import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import Interview from "./pages/Interview";
 import ATSChecker from "./pages/ATSChecker";
-import ResumeUpload from "./pages/ResumeUpload";  // Added this import
-import GrantPermissions from "./pages/GrantPermissions";  // Added this import
+import ResumeUpload from "./pages/ResumeUpload";
+import GrantPermissions from "./pages/GrantPermissions";
 import NotFound from "./pages/NotFound";
+import InterviewResults from "./pages/InterviewResults"; // <-- make sure this exists
+import ProtectedRoute from "./components/auth/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
@@ -25,21 +28,88 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          {/* Navigation bar with dark mode toggle */}
-          <nav className="fixed top-4 right-4 z-50">
-            <DarkModeToggle />
-          </nav>
-
           <Routes>
+            {/* Public / open routes */}
             <Route path="/" element={<Index />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/resume-upload" element={<ResumeUpload />} />  {/* Added this route */}
-            <Route path="/grant-permissions" element={<GrantPermissions />} />  {/* Added this route */}
-            <Route path="/interview" element={<Interview />} />
-            <Route path="/ats-checker" element={<ATSChecker />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route
+              path="/login"
+              element={
+                
+                  <Login />
+                
+              }
+            />
+            <Route
+              path="/signup"
+              element={               
+                  <Signup />               
+              }
+            />
+            <Route
+              path="/forgot-password" 
+              element={            
+                  <ForgotPassword />           
+              } 
+              />
+
+             <Route 
+                path="/reset-password" 
+                element={        
+                    <ResetPassword />     
+                } 
+                /> 
+
+            {/* Protected routes (only when signed in) */}
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/resume-upload"
+              element={
+                <ProtectedRoute>
+                  <ResumeUpload />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/grant-permissions"
+              element={
+                <ProtectedRoute>
+                  <GrantPermissions />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/interview"
+              element={
+                <ProtectedRoute>
+                  <Interview />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/interview-results"
+              element={
+                <ProtectedRoute>
+                  <InterviewResults />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/ats-checker"
+              element={
+                <ProtectedRoute>
+                  <ATSChecker />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Catch-all / 404 */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

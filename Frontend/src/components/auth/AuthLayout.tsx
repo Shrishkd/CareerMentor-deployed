@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { ReactNode } from "react";
-import DarkModeToggle from "@/components/DarkModeToggle";
+import Header from "@/components/Header";
 
 interface AuthLayoutProps {
   children: ReactNode;
@@ -10,13 +10,13 @@ interface AuthLayoutProps {
 
 export const AuthLayout = ({ children, title, subtitle }: AuthLayoutProps) => {
   return (
-    <div className="min-h-screen flex">
-      {/* Theme Toggle */}
-      <div className="fixed top-4 right-4 z-50">
-        <DarkModeToggle />
-      </div>
+    <div className="min-h-screen flex flex-col">
+      {/* Header */}
+      <Header showProfile={false} />
       
-      {/* Left Side - Form */}
+      {/* Content */}
+      <div className="flex-1 flex">
+        {/* Left Side - Form */}
       <div className="flex-1 flex items-center justify-center p-8">
         <motion.div
           initial={{ opacity: 0, x: -20 }}
@@ -76,6 +76,7 @@ export const AuthLayout = ({ children, title, subtitle }: AuthLayoutProps) => {
             intelligent question generation system.
           </p>
         </motion.div>
+      </div>
       </div>
     </div>
   );

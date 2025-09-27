@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,7 @@ export const Signup = () => {
 
   const { toast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation() as { state?: { from?: Location } };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.id]: e.target.value });
@@ -45,9 +46,7 @@ export const Signup = () => {
     const { data, error } = await supabase.auth.signUp({
       email: formData.email,
       password: formData.password,
-      options: {
-        data: { full_name: formData.name }, // stored in user_metadata
-      },
+      options: { data: { full_name: formData.name } },
     });
 
     if (error) {
@@ -60,44 +59,37 @@ export const Signup = () => {
       return;
     }
 
-    // if signup successful, also update profile table
+    // Optional profile upsert
     if (data?.user) {
-      const { error: profileError } = await supabase.from("profiles").upsert(
-        { id: data.user.id, full_name: formData.name },
-        { onConflict: "id" }
-      );
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .upsert({ id: data.user.id, full_name: formData.name }, { onConflict: "id" });
 
-      if (profileError) {
-        console.error("Profile update error:", profileError);
-      }
+      if (profileError) console.error("Profile update error:", profileError);
     }
 
     setIsLoading(false);
     toast({
       title: "Account Created Successfully",
-      description: "Welcome aboard! Redirecting to dashboard...",
+      description: "Welcome aboard! Redirecting...",
     });
-    navigate("/dashboard");
+
+    const redirectTo =
+      (location.state?.from as any)?.pathname && (location.state?.from as any)?.pathname !== "/signup"
+        ? (location.state?.from as any)?.pathname
+        : "/dashboard";
+
+    navigate(redirectTo, { replace: true });
   };
 
   return (
-    <AuthLayout
-      title="Create Account"
-      subtitle="Join thousands of professionals using AI-powered interviews"
-    >
+    <AuthLayout title="Create Account" subtitle="Join thousands of professionals using AI-powered interviews">
       <Card className="border-0 shadow-secondary bg-gradient-card backdrop-blur-sm">
         <CardContent className="p-6">
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Full Name */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-              className="space-y-2"
-            >
-              <Label htmlFor="name" className="text-sm font-medium">
-                Full Name
-              </Label>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="space-y-2">
+              <Label htmlFor="name" className="text-sm font-medium">Full Name</Label>
               <div className="relative">
                 <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -113,15 +105,8 @@ export const Signup = () => {
             </motion.div>
 
             {/* Email */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
-              className="space-y-2"
-            >
-              <Label htmlFor="email" className="text-sm font-medium">
-                Email Address
-              </Label>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="space-y-2">
+              <Label htmlFor="email" className="text-sm font-medium">Email Address</Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -137,15 +122,8 @@ export const Signup = () => {
             </motion.div>
 
             {/* Password */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.6 }}
-              className="space-y-2"
-            >
-              <Label htmlFor="password" className="text-sm font-medium">
-                Password
-              </Label>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }} className="space-y-2">
+              <Label htmlFor="password" className="text-sm font-medium">Password</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -168,15 +146,8 @@ export const Signup = () => {
             </motion.div>
 
             {/* Confirm Password */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.7 }}
-              className="space-y-2"
-            >
-              <Label htmlFor="confirmPassword" className="text-sm font-medium">
-                Confirm Password
-              </Label>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }} className="space-y-2">
+              <Label htmlFor="confirmPassword" className="text-sm font-medium">Confirm Password</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -199,59 +170,29 @@ export const Signup = () => {
             </motion.div>
 
             {/* Terms */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.8 }}
-              className="flex items-start space-x-2"
-            >
-              <input
-                type="checkbox"
-                id="terms"
-                className="mt-1 rounded border-border"
-                required
-              />
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }} className="flex items-start space-x-2">
+              <input type="checkbox" id="terms" className="mt-1 rounded border-border" required />
               <label htmlFor="terms" className="text-sm text-muted-foreground">
                 I agree to the{" "}
-                <Link to="/terms" className="text-primary hover:text-primary-glow">
-                  Terms of Service
-                </Link>{" "}
+                <Link to="/terms" className="text-primary hover:text-primary-glow">Terms of Service</Link>{" "}
                 and{" "}
-                <Link to="/privacy" className="text-primary hover:text-primary-glow">
-                  Privacy Policy
-                </Link>
+                <Link to="/privacy" className="text-primary hover:text-primary-glow">Privacy Policy</Link>
               </label>
             </motion.div>
 
             {/* Submit Button */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.9 }}
-            >
-              <Button
-                type="submit"
-                disabled={isLoading}
-                className="w-full bg-gradient-primary text-primary-foreground hover:shadow-glow transition-all duration-300"
-              >
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9 }}>
+              <Button type="submit" disabled={isLoading} className="w-full bg-gradient-primary text-primary-foreground hover:shadow-glow transition-all duration-300">
                 {isLoading ? "Creating Account..." : "Create Account"}
               </Button>
             </motion.div>
           </form>
 
           {/* Footer */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 1.0 }}
-            className="text-center mt-6 pt-6 border-t border-border/50"
-          >
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.0 }} className="text-center mt-6 pt-6 border-t border-border/50">
             <p className="text-muted-foreground">
               Already have an account?{" "}
-              <Link
-                to="/login"
-                className="text-primary hover:text-primary-glow transition-colors font-medium"
-              >
+              <Link to="/login" className="text-primary hover:text-primary-glow transition-colors font-medium">
                 Sign in here
               </Link>
             </p>

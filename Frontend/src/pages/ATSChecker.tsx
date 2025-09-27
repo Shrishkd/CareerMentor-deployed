@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { motion } from "framer-motion";
-import DarkModeToggle from "@/components/DarkModeToggle";
+import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -136,42 +136,10 @@ export const ATSChecker = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Theme Toggle */}
-      <div className="fixed top-4 right-4 z-50">
-        <DarkModeToggle />
-      </div>
-      
       {/* Header */}
-      <header className="border-b border-border bg-card">
-        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="flex items-center space-x-3"
-          >
-            <div className="w-10 h-10 bg-gradient-primary rounded-lg flex items-center justify-center">
-              <FileText className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold">ATS Resume Checker</h1>
-              <p className="text-sm text-muted-foreground">
-                Optimize your resume for Applicant Tracking Systems
-              </p>
-            </div>
-          </motion.div>
-
-          <div className="flex items-center space-x-2">
-            <Button variant="outline" onClick={() => navigate("/dashboard")}>
-              <Home className="h-4 w-4 mr-2" />
-              Home
-            </Button>
-            <Button variant="ghost" onClick={() => navigate("/dashboard")}>
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Dashboard
-            </Button>
-          </div>
-        </div>
-      </header>
+      <Header />
+      
+      {/* Content */}
 
       <div className="container mx-auto px-6 py-8">
         {!results ? (

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
 import Editor from "@monaco-editor/react";
 import axios from "axios";
-import DarkModeToggle from "@/components/DarkModeToggle";
+import Header from "@/components/Header";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const JUDGE0_URL = "https://judge0-ce.p.rapidapi.com/submissions";
@@ -421,11 +421,11 @@ const Interview: React.FC = () => {
   const programQ = isProgrammingQuestion(questionText);
 
   return (
-    <div className="min-h-screen bg-background py-8 px-4 sm:px-6 lg:px-8">
-      {/* Theme Toggle */}
-      <div className="fixed top-4 right-4 z-50">
-        <DarkModeToggle />
-      </div>
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <Header />
+      
+      <div className="py-8 px-4 sm:px-6 lg:px-8">
       
       <div className="max-w-4xl mx-auto">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="text-center mb-8">
@@ -520,6 +520,7 @@ const Interview: React.FC = () => {
             <input type="checkbox" checked={ttsEnabled} onChange={(e) => setTtsEnabled(e.target.checked)} />
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

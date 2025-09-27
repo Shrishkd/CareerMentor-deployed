@@ -19,14 +19,15 @@ import matplotlib.pyplot as plt
 from fpdf import FPDF
 import json
 import speech_recognition as sr
-load_dotenv() 
 
 
 GENAI_AVAILABLE = False
 try:
     import google.generativeai as genai
     
-    api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    load_dotenv(override=True) 
+    
+    api_key =os.getenv("GEMINI_API_KEY")
     if api_key:
         genai.configure(api_key=api_key)
         GENAI_AVAILABLE = True
@@ -37,7 +38,7 @@ except Exception:
     GENAI_AVAILABLE = False
     print("❌ google.generativeai library not available (pip install google-generativeai).")
 
-DEFAULT_MODEL_NAME = "gemini-1.5-flash"
+DEFAULT_MODEL_NAME = "gemini-2.5-flash"
 
 # Try importing whisper
 try:
