@@ -1,9 +1,29 @@
-Flask
+# --- Core backend ---
+flask
 flask-cors
-pymupdf
+gunicorn
+
+# --- AI + PDF + NLP ---
+google-generativeai
+fpdf
 reportlab
-Pillow
+PyMuPDF  # fitz (for PDF text extraction)
+python-dotenv
+
+# --- Audio + Speech ---
+sounddevice
+numpy
+SpeechRecognition
+openai-whisper
+
+# --- Video / Monitoring ---
 opencv-python
 mediapipe
-numpy
+Pillow
+matplotlib
+
+# --- Storage / Database ---
+supabase
+
+# --- Optional utilities ---
 requests
