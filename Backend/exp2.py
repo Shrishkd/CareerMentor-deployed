@@ -112,9 +112,24 @@ def call_llm(prompt, temperature=0.7, max_tokens=2048, model_name=DEFAULT_MODEL_
             }
         )
         response = model.generate_content(prompt)
-        result = response.text.strip() if response and response.text else "No response."
+        
+        if not response or not response.candidates:
+            return "No response from Gemini."
+
+        # Safely extract text from first candidate
+        parts = []
+        for c in response.candidates:
+            for p in c.content.parts:
+                if p.text:
+                    parts.append(p.text)
+        result = "\n".join(parts).strip()
+
+        # Remove ```json or ``` fences if present
+        if result.startswith("```"):
+            result = result.split("```")[1].replace("json", "").strip()
+
         print("✅ Gemini API call successful")
-        return result
+        return result or "No response text."
     except Exception as e:
         print(f"❌ Error calling Gemini API: {e}")
         return f"Error calling Gemini: {e}"

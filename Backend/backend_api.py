@@ -368,7 +368,6 @@ def generate_report():
         # ✅ Save PDF to repo-root /reports folder
         report_path = exp2.create_comprehensive_report(
             questions, answers, evaluations, final_assessment, resume_text,
-            output_dir=REPORTS_DIR   # <--- force to repo-root reports
         )
 
         # ✅ Optionally upload to Supabase storage
