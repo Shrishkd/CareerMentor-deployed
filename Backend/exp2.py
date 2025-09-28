@@ -10,12 +10,14 @@ import time
 # Import libraries
 import fitz
 import tkinter as tk
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 from tkinter import filedialog
 import pyttsx3
 from datetime import datetime
 from dotenv import load_dotenv
 import re
-import matplotlib.pyplot as plt
 from fpdf import FPDF
 import json
 import speech_recognition as sr
