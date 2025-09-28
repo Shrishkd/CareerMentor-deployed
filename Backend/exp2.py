@@ -9,11 +9,9 @@ import time
 
 # Import libraries
 import fitz
-import tkinter as tk
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from tkinter import filedialog
 import pyttsx3
 from datetime import datetime
 from dotenv import load_dotenv
@@ -73,21 +71,17 @@ audio_buffer = []
 
 # ========== PDF Handling ==========
 def select_pdf_file():
+    """Select a PDF file path.
+    On server (Render), tkinter is not available, so fallback to input().
+    """
     try:
-        root = tk.Tk()
-        root.withdraw()
-        print("📂 Please select your resume PDF...")
-        pdf_path = filedialog.askopenfilename(
-            title="Select Resume PDF",
-            filetypes=[("PDF files", "*.pdf")]
-        )
-        root.destroy()
-        if not pdf_path:
-            pdf_path = input("❌ No file selected. Enter PDF path manually: ").strip()
+        # In headless environments, just ask for manual input
+        pdf_path = input("📂 Enter the path to your resume PDF: ").strip()
         return pdf_path
     except Exception as e:
-        print(f"⚠️ Error opening file dialog: {e}")
-        return input("Enter resume PDF path manually: ").strip()
+        print(f"⚠️ Error selecting file: {e}")
+        return ""
+
 
 def extract_text_from_pdf(pdf_path):
     try:
