@@ -39,7 +39,12 @@ os.makedirs(REPORTS_DIR, exist_ok=True)
 
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/api/*": {"origins": os.getenv("FRONTEND_ORIGIN", "*")}})
+
+
+@app.route("/api/healthz", methods=["GET"])
+def health():
+    return jsonify({"ok": True})
 
 # In-memory session storage
 active_sessions = {}
