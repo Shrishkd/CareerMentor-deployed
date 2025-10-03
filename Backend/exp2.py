@@ -12,13 +12,18 @@ import fitz
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import pyttsx3
 from datetime import datetime
 from dotenv import load_dotenv
 import re
 from fpdf import FPDF
 import json
 import speech_recognition as sr
+
+try:
+    import pyttsx3
+except ImportError:
+    pyttsx3 = None
+
 
 
 GENAI_AVAILABLE = False
@@ -572,12 +577,21 @@ def listen_to_answer():
         return ""
 
 def speak_text(text, voice_id=None):
-    engine = pyttsx3.init()
-    if voice_id:
-        engine.setProperty('voice', voice_id)
-    engine.setProperty('rate', 150)
-    engine.say(text)
-    engine.runAndWait()
+    """Speak text locally with pyttsx3 if available, otherwise just print."""
+    if pyttsx3:
+        try:
+            engine = pyttsx3.init()
+            if voice_id:
+                engine.setProperty("voice", voice_id)
+            engine.setProperty("rate", 150)
+            engine.say(text)
+            engine.runAndWait()
+        except Exception as e:
+            print(f"[TTS error] {e} -> {text}")
+    else:
+        # On Render or when pyttsx3 is not installed
+        print(f"[TTS disabled] {text}")
+
 
 # ========== Enhanced Report Generation with Detailed Explanations ==========
 def create_comprehensive_report(questions, answers, evaluations, final_assessment, resume_text):
