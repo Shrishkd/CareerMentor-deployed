@@ -48,6 +48,7 @@ DEFAULT_MODEL_NAME = "gemini-2.5-flash"
 # Try importing whisper
 try:
     import whisper
+    model = whisper.load_model("tiny")  # much lighter, faster, uses less RAM
     print("✅ Whisper imported successfully")
     print("🔄 Loading Whisper model...")
     whisper_model = whisper.load_model("small")
