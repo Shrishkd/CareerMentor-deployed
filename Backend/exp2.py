@@ -46,18 +46,31 @@ except Exception:
 DEFAULT_MODEL_NAME = "gemini-2.5-flash"
 
 # Try importing whisper
+# Try importing whisper with lazy loading
 try:
     import whisper
-    model = whisper.load_model("tiny")  # much lighter, faster, uses less RAM
-    print("✅ Whisper imported successfully")
-    print("🔄 Loading Whisper model...")
-    whisper_model = whisper.load_model("small")
-    print("✅ Whisper model loaded successfully!")
+    print("✅ Whisper imported successfully (lazy mode)")
+    _whisper_model = None   # will be loaded on first use
     WHISPER_AVAILABLE = True
 except Exception as e:
     print(f"❌ Whisper setup failed: {e}")
-    whisper_model = None
+    whisper = None
+    _whisper_model = None
     WHISPER_AVAILABLE = False
+
+
+def get_whisper_model():
+    """Lazy-load and cache the Whisper tiny model."""
+    global _whisper_model
+    if not WHISPER_AVAILABLE:
+        raise RuntimeError("Whisper not available in this environment")
+
+    if _whisper_model is None:
+        print("🔄 Loading Whisper tiny model (lazy)...")
+        _whisper_model = whisper.load_model("tiny")
+        print("✅ Whisper tiny model loaded successfully!")
+    return _whisper_model
+
 
 # ========== Enhanced Gemini Setup ==========
 load_dotenv()
@@ -489,39 +502,41 @@ def create_temp_wav_file(audio_data, samplerate=16000):
         return None
 
 def transcribe_with_whisper(audio_file_path):
-    if not WHISPER_AVAILABLE or not whisper_model:
+    if not WHISPER_AVAILABLE:
         print("⚠️ Whisper not available, using Google Speech Recognition")
         return transcribe_with_google_fallback(audio_file_path)
-    
+
     try:
         if not os.path.exists(audio_file_path):
             raise FileNotFoundError(f"Audio file not found: {audio_file_path}")
-        
+
         file_size = os.path.getsize(audio_file_path)
         if file_size == 0:
             raise ValueError(f"Audio file is empty: {audio_file_path}")
-        
+
         print(f"🔄 Transcribing with Whisper... (File: {file_size} bytes)")
-        
-        result = whisper_model.transcribe(
+
+        # ✅ Use lazy-loaded tiny model
+        model = get_whisper_model()
+        result = model.transcribe(
             audio_file_path,
             language="en",
             task="transcribe"
         )
-        
-        transcription = result["text"].strip()
+
+        transcription = result.get("text", "").strip()
         print(f"📝 Whisper Transcription: '{transcription}'")
         return transcription
-        
+
     except Exception as e:
         print(f"❌ Whisper transcription error: {e}")
         return transcribe_with_google_fallback(audio_file_path)
-    
+
     finally:
         try:
             if os.path.exists(audio_file_path):
                 os.remove(audio_file_path)
-        except:
+        except Exception:
             pass
 
 def transcribe_with_google_fallback(audio_file_path):
@@ -909,7 +924,7 @@ if __name__ == "__main__":
     print("🚀 AI INTERVIEW SYSTEM - ENHANCED WITH DETAILED EXPLANATIONS")
     print("=" * 70)
     
-    if WHISPER_AVAILABLE and whisper_model:
+    if WHISPER_AVAILABLE and get_whisper_model:
         print("📌 Speech Recognition: Whisper AI (Offline, High Accuracy)")
     else:
         print("📌 Speech Recognition: Google STT (Online Fallback)")

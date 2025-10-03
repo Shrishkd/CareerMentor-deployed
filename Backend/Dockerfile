@@ -23,3 +23,6 @@ EXPOSE 8000
 
 # Start app with gunicorn
 CMD ["gunicorn", "backend_api:app", "-w", "1", "-k", "gthread", "--threads", "1", "-b", "0.0.0.0:8000", "--timeout", "120"]
+
+# Pre-download whisper tiny model into container cache
+RUN python3 -c "import whisper; whisper.load_model('tiny')"
