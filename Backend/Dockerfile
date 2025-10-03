@@ -22,4 +22,4 @@ COPY . .
 EXPOSE 8000
 
 # Start app with gunicorn
-CMD ["gunicorn", "backend_api:app", "-w", "2", "-k", "gthread", "-b", "0.0.0.0:8000", "--timeout", "120"]
+CMD ["gunicorn", "backend_api:app", "-w", "1", "-k", "gthread", "--threads", "1", "-b", "0.0.0.0:8000", "--timeout", "120"]
