@@ -17,6 +17,7 @@ lerna-debug.log*
 # Environment
 .env
 *.local
+.env.production
 
 # User uploads & virtual envs
 /uploads
