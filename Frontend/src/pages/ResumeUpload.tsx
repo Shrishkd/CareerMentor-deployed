@@ -103,10 +103,11 @@ const ResumeUpload: React.FC = () => {
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
+    onDrop: uploading ? () => {} : onDrop,
     accept: { 'application/pdf': ['.pdf'] },
     maxSize: 10 * 1024 * 1024, // 10MB
     multiple: false,
+    disabled: uploading,
   });
 
   const removeFile = () => {
@@ -127,7 +128,9 @@ const ResumeUpload: React.FC = () => {
               <h2 className="text-2xl font-bold mb-4">Upload your Resume (PDF)</h2>
               <div
                 {...getRootProps()}
-                className={`border-2 border-dashed rounded p-6 text-center cursor-pointer ${
+                className={`border-2 border-dashed rounded p-6 text-center ${
+                  uploading ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+                } ${
                   isDragActive ? 'border-primary' : 'border-muted'
                 }`}
               >
@@ -151,6 +154,13 @@ const ResumeUpload: React.FC = () => {
               </div>
 
               {error && <p className="text-sm text-destructive mt-4">{error}</p>}
+
+              {uploading && (
+                <div className="mt-4 flex items-center justify-center space-x-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                  <p className="text-sm text-muted-foreground">Processing resume and generating questions...</p>
+                </div>
+              )}
 
               <div className="flex justify-between items-center mt-8">
                 <div className="flex items-center space-x-2">

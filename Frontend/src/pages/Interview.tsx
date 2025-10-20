@@ -8,6 +8,7 @@ import { toast } from "@/components/ui/use-toast";
 import Editor from "@monaco-editor/react";
 import axios from "axios";
 import Header from "@/components/Header";
+import { Home } from "lucide-react";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const JUDGE0_URL = "https://judge0-ce.p.rapidapi.com/submissions";
@@ -61,6 +62,7 @@ const Interview: React.FC = () => {
   const [answers, setAnswers] = useState<string[]>([]);
   const [evaluations, setEvaluations] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [isProcessingAudio, setIsProcessingAudio] = useState<boolean>(false);
 
   // audio recording
   const [isRecording, setIsRecording] = useState<boolean>(false);
@@ -185,6 +187,7 @@ const Interview: React.FC = () => {
   const submitAudio = async (audioBlob: Blob) => {
     if (!sessionData) return;
     setIsSubmitting(true);
+    setIsProcessingAudio(true);
 
     try {
       const form = new FormData();
@@ -215,6 +218,7 @@ const Interview: React.FC = () => {
       toast({ title: "Submission failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
     } finally {
       setIsSubmitting(false);
+      setIsProcessingAudio(false);
       setAudioChunks([]);
     }
   };
@@ -446,7 +450,18 @@ const Interview: React.FC = () => {
 
         <Card className="mb-8">
           <CardContent className="p-8">
-            <h2 className="text-2xl font-semibold text-foreground mb-6">{questionText}</h2>
+            <div className="flex justify-between items-start mb-6">
+              <h2 className="text-2xl font-semibold text-foreground">{questionText}</h2>
+              <Button
+                variant="ghost"
+                onClick={() => navigate('/dashboard')}
+                className="flex items-center gap-2"
+                disabled={isSubmitting}
+              >
+                <Home className="h-4 w-4" />
+                Home
+              </Button>
+            </div>
 
             <div className="mb-6">
               <p className="text-sm text-muted-foreground">💡 Tip: For coding questions use the editor below and run your code. For others, record your voice.</p>
@@ -464,7 +479,16 @@ const Interview: React.FC = () => {
                   </select>
 
                   <Button onClick={runCode} disabled={!codeAnswer.trim()}>Run Code</Button>
-                  <Button onClick={submitCodeAnswer} disabled={!codeAnswer.trim() || isSubmitting}>Submit Code</Button>
+                  <Button onClick={submitCodeAnswer} disabled={!codeAnswer.trim() || isSubmitting}>
+                    {isSubmitting ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Analyzing...
+                      </>
+                    ) : (
+                      'Submit Code'
+                    )}
+                  </Button>
                   <Button variant="ghost" onClick={skipQuestion} disabled={isSubmitting}>Skip</Button>
                 </div>
 
@@ -501,11 +525,25 @@ const Interview: React.FC = () => {
                 </Button>
 
                 <Button onClick={skipQuestion} disabled={isSubmitting}>
-                  Skip Question
+                  {isSubmitting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                      Processing...
+                    </>
+                  ) : (
+                    'Skip Question'
+                  )}
                 </Button>
 
                 <Button onClick={finishInterview} disabled={isRecording || isSubmitting}>
-                  Finish Interview
+                  {isSubmitting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Analyzing...
+                    </>
+                  ) : (
+                    'Finish Interview'
+                  )}
                 </Button>
               </div>
             )}
@@ -520,6 +558,17 @@ const Interview: React.FC = () => {
             <input type="checkbox" checked={ttsEnabled} onChange={(e) => setTtsEnabled(e.target.checked)} />
           </div>
         </div>
+
+        {/* Audio Processing Overlay */}
+        {isProcessingAudio && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-background p-6 rounded-lg shadow-lg text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-lg font-medium">Processing your audio answer...</p>
+              <p className="text-sm text-muted-foreground mt-2">Please wait while we analyze your response</p>
+            </div>
+          </div>
+        )}
       </div>
       </div>
     </div>
