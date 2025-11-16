@@ -21,6 +21,7 @@ lerna-debug.log*
 
 # User uploads & virtual envs
 /uploads
+/reports
 /venv
 
 # Binary / large files

@@ -32,7 +32,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))             # .../Backend
 PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, os.pardir)) # repo root
 
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")        # keep uploads inside Backend
-REPORTS_DIR = os.path.join(PROJECT_ROOT, "reports")   # write PDFs to repo-level /reports
+REPORTS_DIR = os.path.abspath(os.path.join(PROJECT_ROOT, "reports")) # write PDFs to repo-level /reports
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(REPORTS_DIR, exist_ok=True)
@@ -314,9 +314,9 @@ def submit_answer():
         print("❌ submit-answer error:", e)
         return jsonify({"error": str(e)}), 500
 
-# =========================
+# ===========================
 # Endpoint: start monitoring
-# =========================
+# ===========================
 @app.route("/api/start-monitoring", methods=["POST"])
 def start_monitoring():
     try:
@@ -327,16 +327,69 @@ def start_monitoring():
         if session_id not in active_sessions:
             return jsonify({"error": "Invalid session"}), 400
 
-        # Launch monitoring (non-blocking)
-        report_path = livevid1.start_monitoring_async(session_id, duration, REPORTS_DIR)
+        # Launch monitoring async — returns provisional PDF path
+        provisional_report = livevid1.start_monitoring_async(
+            session_id,
+            duration,
+            REPORTS_DIR
+        )
+
+        # ✅ Correct variable name used below (this was your doubt!)
+        print(f"📷 Monitoring started for session: {session_id}, provisional: {provisional_report}")
+
+        # Store for frontend polling
         active_sessions[session_id]["monitoring"] = {
             "duration": duration,
-            "report_path": report_path
+            "report_path": provisional_report
         }
-        return jsonify({"status": "monitoring started"})
+
+        # Return the provisional PDF path so frontend can poll
+        return jsonify({
+            "status": "monitoring started",
+            "provisional_report_path": provisional_report
+        })
+        
     except Exception as e:
         print("❌ start-monitoring error:", e)
         return jsonify({"error": str(e)}), 500
+    
+# =================================
+# Endpoint: check monitoring status
+# =================================
+@app.route("/api/check-monitoring-status", methods=["POST"])
+def check_monitoring_status():
+    try:
+        data = request.get_json()
+        session_id = data.get("session_id")
+
+        if session_id not in active_sessions:
+            return jsonify({"error": "Invalid session"}), 400
+
+        session = active_sessions[session_id]
+        m = session.get("monitoring", {})
+
+        provisional_path = m.get("report_path")
+
+        # File is ready
+        if provisional_path and os.path.exists(provisional_path):
+
+            # ⭐ NEW: Upload monitoring report to Supabase
+            upload_info = store_report_and_get_url(provisional_path, session_id)
+
+            session["monitoring_report"] = upload_info  # store cloud info
+
+            return jsonify({
+                "ready": True,
+                "report_path": provisional_path,
+                "cloud_url": upload_info.get("url")
+            })
+
+        return jsonify({"ready": False})
+
+    except Exception as e:
+        print("❌ check-monitoring-status error:", e)
+        return jsonify({"error": str(e)}), 500
+
 
 # =========================
 # Endpoint: generate report

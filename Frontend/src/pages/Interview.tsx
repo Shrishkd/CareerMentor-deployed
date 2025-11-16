@@ -57,6 +57,8 @@ const Interview: React.FC = () => {
       return null;
     }
   });
+  //Tab switch count
+  const [tabSwitchCount, setTabSwitchCount] = useState(0);
 
   const [currentQuestion, setCurrentQuestion] = useState<number>(0);
   const [answers, setAnswers] = useState<string[]>([]);
@@ -122,6 +124,90 @@ const Interview: React.FC = () => {
     else if (lower.includes("javascript") || lower.includes("js")) setLanguage("javascript");
     else setLanguage("python");
   }, [currentQuestion, sessionData, ttsEnabled]);
+
+  const finishInterview = async () => {
+  if (!sessionData) return;
+
+  try {
+    toast({ title: "Generating report", description: "Please wait..." });
+
+    const data = await safeFetch(`${API_BASE}/api/generate-report`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sessionData.session_id }),
+    });
+
+    // ⭐ Save report url from backend
+    localStorage.setItem(
+      "InterviewResults",
+      JSON.stringify({
+        session_id: sessionData.session_id,
+        questions: sessionData.questions,
+        answers,
+        evaluations,
+        report_url: data.report_url,      // <-- THIS LINE IS SUPER IMPORTANT
+        report_path: data.report_path,    // optional
+      })
+    );
+
+    toast({ title: "Interview complete", description: "Redirecting to results..." });
+    
+    navigate("/InterviewResults"); // No need for setTimeout
+  } catch (err) {
+    console.error("finishInterview failed:", err);
+    toast({
+      title: "Report generation failed",
+      description: (err as Error).message,
+      variant: "destructive",
+    });
+  }
+};
+
+  // Detect tab switching
+  useEffect(() => {
+  const handleVisibilityChange = () => {
+    if (document.hidden) {
+      setTabSwitchCount((prev) => {
+        const next = prev + 1;
+
+        if (next === 1) {
+          toast({
+            title: "Warning 1",
+            description: "Please do not switch tabs during the interview.",
+            variant: "destructive",
+          });
+        }
+
+        if (next === 2) {
+          toast({
+            title: "Warning 2",
+            description: "Switching tabs again will end the interview.",
+            variant: "destructive",
+          });
+        }
+
+        if (next >= 3) {
+          toast({
+            title: "Interview terminated",
+            description: "You switched tabs multiple times.",
+            variant: "destructive",
+          });
+
+          finishInterview();
+        }
+
+        return next;
+      });
+    }
+  };
+
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+
+  return () => {
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
+  };
+}, [finishInterview]);
+
 
   // ---------- AUDIO RECORDING ----------
   const startRecording = async () => {
@@ -375,35 +461,6 @@ const Interview: React.FC = () => {
     } catch (err) {
       console.error("startMonitoring failed:", err);
       toast({ title: "Monitoring failed", description: (err as Error).message, variant: "destructive" });
-    }
-  };
-
-  const finishInterview = async () => {
-    if (!sessionData) return;
-    try {
-      toast({ title: "Generating report", description: "Please wait..." });
-      const data = await safeFetch(`${API_BASE}/api/generate-report`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: sessionData.session_id }),
-      });
-
-      localStorage.setItem(
-        "interview_results",
-        JSON.stringify({
-          ...data,
-          session_id: sessionData.session_id,
-          questions: sessionData.questions,
-          answers,
-          evaluations,
-        })
-      );
-
-      toast({ title: "Interview complete", description: "Redirecting to results..." });
-      setTimeout(() => navigate("/interview-results"), 1200);
-    } catch (err) {
-      console.error("finishInterview failed:", err);
-      toast({ title: "Report generation failed", description: (err as Error).message, variant: "destructive" });
     }
   };
 
