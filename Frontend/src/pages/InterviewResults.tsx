@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer,
   BarChart, Bar, Legend
 } from "recharts";
 
@@ -27,49 +28,82 @@ interface FinalAssessment {
   next_steps: string;
 }
 
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
 const InterviewResults: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
+
+  // session passed via navigate(...)
   const { sessionId } = location.state || {};
 
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
   const [finalAssessment, setFinalAssessment] = useState<FinalAssessment | null>(null);
   const [reportPath, setReportPath] = useState<string | null>(null);
+  const [reportUrl, setReportUrl] = useState<string | null>(null);
+  const [storedSession, setStoredSession] = useState<string | null>(sessionId || null);
 
   useEffect(() => {
-    if (!sessionId) {
+    // 1️⃣ First try using router state (preferred)
+    if (sessionId) {
+      loadFromLocalStorage(sessionId);
+      return;
+    }
+
+    // 2️⃣ If sessionId not provided via route, fallback to localStorage
+    const raw = localStorage.getItem("InterviewResults");
+    if (!raw) {
       navigate("/");
       return;
     }
 
-    const fetchReport = async () => {
-      try {
-        const res = await fetch("http://localhost:8000/api/generate-report", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ session_id: sessionId }),
-        });
-        if (!res.ok) throw new Error("Failed to generate report");
-        const data = await res.json();
+    try {
+      const parsed = JSON.parse(raw);
+      setStoredSession(parsed.session_id || null);
+      setEvaluations(parsed.evaluations || []);
+      setReportPath(parsed.report_path || null);
+      setReportUrl(parsed.report_url || null);
 
-        setEvaluations(data.evaluations || []);
-        if (data.final_assessment) setFinalAssessment(data.final_assessment);
-        if (data.report_path) setReportPath(data.report_path);
-      } catch (err) {
-        console.error("❌ Failed to fetch report:", err);
+      // final assessment is optional
+      if (parsed.final_assessment) {
+        setFinalAssessment(parsed.final_assessment);
       }
-    };
-
-    fetchReport();
+    } catch (err) {
+      console.error("Error parsing InterviewResults:", err);
+      navigate("/");
+    }
   }, [sessionId, navigate]);
 
-  // Data for line chart
+  // Load data from localStorage when sessionId is available
+  const loadFromLocalStorage = (id: string) => {
+    const raw = localStorage.getItem("InterviewResults");
+    if (!raw) {
+      navigate("/");
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+
+      setStoredSession(id);
+      setEvaluations(parsed.evaluations || []);
+      setReportPath(parsed.report_path || null);
+      setReportUrl(parsed.report_url || null);
+
+      if (parsed.final_assessment) setFinalAssessment(parsed.final_assessment);
+    } catch (err) {
+      console.error("Failed to load localStorage InterviewResults:", err);
+      navigate("/");
+    }
+  };
+
+  // Line chart data (overall score per question)
   const scoreData = evaluations.map((ev, idx) => ({
     name: `Q${idx + 1}`,
     score: ev.overall_score || 0,
   }));
 
-  // Data for bar chart (category breakdown of first question)
+  // Category breakdown for first question
   const categoryData =
     evaluations.length > 0 && evaluations[0].category_scores
       ? Object.entries(evaluations[0].category_scores).map(([cat, val]) => ({
@@ -82,7 +116,7 @@ const InterviewResults: React.FC = () => {
     <div className="max-w-6xl mx-auto p-6">
       <h1 className="text-3xl font-bold mb-6">Interview Results</h1>
 
-      {/* Final Assessment */}
+      {/* Final Assessment Section */}
       {finalAssessment && (
         <div className="mb-8 p-6 border rounded-lg shadow bg-white">
           <h2 className="text-2xl font-semibold mb-4">Final Assessment</h2>
@@ -95,9 +129,9 @@ const InterviewResults: React.FC = () => {
         </div>
       )}
 
-      {/* Graphs */}
+      {/* Score Charts */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
-        {/* Line chart - Scores per question */}
+        {/* Line Chart */}
         <div className="p-4 border rounded-lg shadow bg-white">
           <h3 className="text-lg font-semibold mb-2">Scores per Question</h3>
           <ResponsiveContainer width="100%" height={300}>
@@ -111,7 +145,7 @@ const InterviewResults: React.FC = () => {
           </ResponsiveContainer>
         </div>
 
-        {/* Bar chart - Category breakdown */}
+        {/* Bar Chart */}
         <div className="p-4 border rounded-lg shadow bg-white">
           <h3 className="text-lg font-semibold mb-2">Category Breakdown (Q1)</h3>
           <ResponsiveContainer width="100%" height={300}>
@@ -127,7 +161,7 @@ const InterviewResults: React.FC = () => {
         </div>
       </div>
 
-      {/* Evaluations */}
+      {/* Detailed Evaluations */}
       <h2 className="text-xl font-semibold mb-4">Detailed Question Evaluations</h2>
       <div className="space-y-6">
         {evaluations.map((ev, idx) => (
@@ -141,11 +175,15 @@ const InterviewResults: React.FC = () => {
         ))}
       </div>
 
-      {/* Download Report */}
-      {reportPath && (
+      {/* Download PDF Button */}
+      {(reportUrl || storedSession) && (
         <div className="mt-8">
           <a
-            href={`http://localhost:8000/api/download-report/${sessionId}`}
+            href={
+              reportUrl
+                ? reportUrl
+                : `${API_BASE}/api/download-report/${storedSession}`
+            }
             target="_blank"
             rel="noopener noreferrer"
             className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700"
@@ -155,6 +193,7 @@ const InterviewResults: React.FC = () => {
         </div>
       )}
 
+      {/* Back Home */}
       <button
         onClick={() => navigate("/")}
         className="mt-6 bg-gray-700 text-white px-4 py-2 rounded hover:bg-gray-800"

@@ -19,13 +19,30 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY) if USE_SUPABASE else None
 def store_report_and_get_url(local_path: str, session_id: str):
     if not USE_SUPABASE:
         return {"storage": "local", "path": local_path, "url": None}
+    
     storage_key = f"{session_id}/{os.path.basename(local_path)}"
+    
     with open(local_path, "rb") as f:
-        supabase.storage.from_(SUPABASE_BUCKET_REPORTS).upload(
-            storage_key, f, {"content-type": "application/pdf", "upsert": True}
-        )
-    signed = supabase.storage.from_(SUPABASE_BUCKET_REPORTS).create_signed_url(storage_key, 60*60*24*7)  # 7 days
-    return {"storage": "supabase", "path": storage_key, "url": signed["signedURL"]}
+        bucket = supabase.storage.from_(SUPABASE_BUCKET_REPORTS)
+
+        try:
+            bucket.remove([storage_key])
+        except:
+            pass
+
+        bucket.upload(storage_key, f, {"content-type": "application/pdf"})
+
+
+    signed = supabase.storage.from_(SUPABASE_BUCKET_REPORTS).create_signed_url(
+        storage_key,
+        60 * 60 * 24 * 7,  # 7 days
+    )
+
+    return {
+        "storage": "supabase",
+        "path": storage_key,
+        "url": signed["signedURL"],
+    }
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))             # .../Backend
@@ -428,21 +445,27 @@ def generate_report():
             questions, answers, evaluations, final_assessment, resume_text,
         )
 
-        # ✅ Optionally upload to Supabase storage
-        meta = {"storage": "local", "path": report_path, "url": None}
         if supabase:  # only if Supabase client configured
             try:
                 storage_key = f"{session_id}/{os.path.basename(report_path)}"
                 with open(report_path, "rb") as f:
                     supabase.storage.from_(SUPABASE_BUCKET_REPORTS).upload(
-                        storage_key, f, {"content-type": "application/pdf", "upsert": True}
+                        storage_key,
+                        f,
+                        {"content-type": "application/pdf"},
                     )
                 signed = supabase.storage.from_(SUPABASE_BUCKET_REPORTS).create_signed_url(
-                    storage_key, 60 * 60 * 24 * 7  # 7 days
+                    storage_key,
+                    60 * 60 * 24 * 7,  # 7 days
                 )
-                meta = {"storage": "supabase", "path": storage_key, "url": signed["signedURL"]}
+                meta = {
+                    "storage": "supabase",
+                    "path": storage_key,
+                    "url": signed["signedURL"],
+                }
             except Exception as e:
                 print("⚠️ Supabase upload failed:", e)
+
 
         session["report_path"] = report_path
         session["report_meta"] = meta

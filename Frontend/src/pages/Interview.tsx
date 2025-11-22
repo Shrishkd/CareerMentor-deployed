@@ -152,7 +152,10 @@ const Interview: React.FC = () => {
 
     toast({ title: "Interview complete", description: "Redirecting to results..." });
     
-    navigate("/InterviewResults"); // No need for setTimeout
+    navigate("/InterviewResults", {
+    state: { sessionId: sessionData.session_id },
+    });
+ 
   } catch (err) {
     console.error("finishInterview failed:", err);
     toast({

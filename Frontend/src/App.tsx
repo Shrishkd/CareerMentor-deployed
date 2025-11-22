@@ -16,7 +16,7 @@ import ATSChecker from "./pages/ATSChecker";
 import ResumeUpload from "./pages/ResumeUpload";
 import GrantPermissions from "./pages/GrantPermissions";
 import NotFound from "./pages/NotFound";
-import InterviewResults from "./pages/InterviewResults"; // <-- make sure this exists
+import InterviewResults from "./pages/InterviewResults";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 
 const queryClient = new QueryClient();
@@ -93,7 +93,7 @@ const App = () => (
               }
             />
             <Route
-              path="/interview-results"
+              path="/InterviewResults"
               element={
                 <ProtectedRoute>
                   <InterviewResults />
@@ -108,7 +108,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-
+            
             {/* Catch-all / 404 */}
             <Route path="*" element={<NotFound />} />
           </Routes>
