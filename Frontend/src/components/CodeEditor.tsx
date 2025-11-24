@@ -246,12 +246,16 @@ export const CodeEditor = ({ question, onCodeChange }: CodeEditorProps) => {
           <CardTitle className="text-lg">Code Editor</CardTitle>
           <div className="flex items-center space-x-4">
             <Select value={selectedLanguage.id.toString()} onValueChange={handleLanguageChange}>
-              <SelectTrigger className="w-40">
+              <SelectTrigger className="w-40 bg-muted border-2 border-border hover:border-primary transition-colors">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-popover border-2 border-border">
                 {languages.map((lang) => (
-                  <SelectItem key={lang.id} value={lang.id.toString()}>
+                  <SelectItem 
+                    key={lang.id} 
+                    value={lang.id.toString()}
+                    className="hover:bg-accent focus:bg-accent cursor-pointer"
+                  >
                     {lang.name}
                   </SelectItem>
                 ))}

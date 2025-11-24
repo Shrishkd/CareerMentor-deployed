@@ -6,7 +6,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
-  Camera,
   User,
   LogOut,
   Settings,
@@ -67,8 +66,12 @@ export const Header = ({ showProfile = true, className = "" }: HeaderProps) => {
           transition={{ duration: 0.2 }}
           className="flex items-center space-x-3"
         >
-          <div className="w-10 h-10 bg-gradient-primary rounded-lg flex items-center justify-center">
-            <Camera className="h-5 w-5 text-primary-foreground" />
+          <div className="w-10 h-10 bg-gradient-primary rounded-lg flex items-center justify-center overflow-hidden">
+            <img 
+              src="/favicon.ico" 
+              alt="Career Mentor" 
+              className="w-full h-full object-contain"
+            />
           </div>
           <div>
             <h1 className="text-xl font-bold">Career Mentor</h1>

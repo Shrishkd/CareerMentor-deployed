@@ -38,7 +38,7 @@ const DarkModeToggle: React.FC<DarkModeToggleProps> = ({ className = '' }) => {
     <button
       onClick={toggleDarkMode}
       className={`relative inline-flex h-12 w-20 items-center justify-center rounded-full p-1
-        transition-all duration-500 ease-in-out transform hover:scale-110 hover:shadow-2xl
+        transition-all duration-500 ease-in-out transform hover:shadow-2xl
         ${isDark 
           ? 'bg-gradient-to-r from-slate-800 via-slate-700 to-slate-600 shadow-lg shadow-slate-900/30' 
           : 'bg-gradient-to-r from-yellow-300 via-orange-400 to-red-400 shadow-lg shadow-orange-500/30'

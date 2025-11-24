@@ -57,7 +57,11 @@ export const Login = () => {
   };
 
   return (
-    <AuthLayout title="Welcome Back" subtitle="Sign in to continue your AI interview journey">
+    <AuthLayout 
+      title="Welcome Back" 
+      subtitle="Sign in to continue your AI interview journey"
+      heroImage="https://res.cloudinary.com/dks0vhj0j/image/upload/v1763846913/Log_in_page_oybkyb.png"
+    >
       <Card className="border-0 shadow-secondary bg-gradient-card backdrop-blur-sm">
         <CardContent className="p-6">
           <form onSubmit={handleSubmit} className="space-y-6">

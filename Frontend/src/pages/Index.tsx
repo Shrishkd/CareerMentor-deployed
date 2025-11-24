@@ -55,8 +55,14 @@ const Index = () => {
       <Header showProfile={false} />
       
       {/* Hero Section */}
-      <section className="relative overflow-hidden bg-gradient-hero">
-        <div className="absolute inset-0 bg-gradient-card backdrop-blur-3xl"></div>
+      <section className="relative overflow-hidden">
+        <div 
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+          style={{
+            backgroundImage: 'url(https://res.cloudinary.com/dks0vhj0j/image/upload/v1763843867/Home_page_hgygpk.png)'
+          }}
+        >
+        </div>
         <div className="relative container mx-auto px-6 py-20">
           <motion.div
             initial={{ opacity: 0, y: 30 }}

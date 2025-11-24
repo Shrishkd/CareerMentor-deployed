@@ -83,7 +83,11 @@ export const Signup = () => {
   };
 
   return (
-    <AuthLayout title="Create Account" subtitle="Join thousands of professionals using AI-powered interviews">
+    <AuthLayout 
+      title="Create Account" 
+      subtitle="Join thousands of professionals using AI-powered interviews"
+      heroImage="https://res.cloudinary.com/dks0vhj0j/image/upload/v1763989637/sign_up_page_mvk5nk.png"
+    >
       <Card className="border-0 shadow-secondary bg-gradient-card backdrop-blur-sm">
         <CardContent className="p-6">
           <form onSubmit={handleSubmit} className="space-y-6">
