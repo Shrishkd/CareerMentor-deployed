@@ -98,12 +98,11 @@ Career_Mentor/
 
 <img width="1917" height="984" alt="upload" src="https://github.com/user-attachments/assets/3cf1f323-ac1a-49df-bdef-d90154ca46ec" />
 
-<img width="1919" height="990" alt="Q1" src="https://github.com/user-attachments/assets/94220f53-ea12-423b-a7e3-a392eb88a783" />
+<img width="1919" height="970" alt="Q1" src="https://github.com/user-attachments/assets/e4a20798-03a0-4448-8c34-37f09e28069e" />
 
 <img width="1912" height="990" alt="conding qn" src="https://github.com/user-attachments/assets/754e458b-28bb-4b51-9d9e-a19e0e95064b" />
 
 <img width="995" height="918" alt="image" src="https://github.com/user-attachments/assets/b90e21bc-8149-41da-a82b-1eeb146e8b10" />
-
 
 <img width="990" height="902" alt="image" src="https://github.com/user-attachments/assets/3b7d336f-c0bd-480f-9522-01b20d01cafe" />
 
@@ -200,5 +199,6 @@ This project is licensed under the MIT License - feel free to modify and build u
 If you’d like to improve Career Mentor or integrate your own AI models — pull requests and discussions are welcome!
 
 > ⭐ Don’t forget to star the repository if you find it helpful!
+
 
 
